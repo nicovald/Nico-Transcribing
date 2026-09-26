@@ -1,0 +1,9 @@
+services:
+  grok-transcriber:
+    build: .
+    container_name: grok-transcriber
+    restart: unless-stopped
+    ports:
+      - "3462:3462"
+    volumes:
+      - ./data:/app/data

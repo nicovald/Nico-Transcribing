@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+*.log
+logs
+
+# Local runtime data: API keys, extracted audio, jobs
+data/*
+!data/.gitkeep
+release
