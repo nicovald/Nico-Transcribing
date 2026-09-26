@@ -1,7 +1,7 @@
 {
   "name": "grok-transcriber",
   "productName": "Grok Transcriber",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Local app that turns multi-track video audio into timestamped SRT subtitles using Grok, OpenAI, Deepgram, AssemblyAI or ElevenLabs.",
   "type": "module",
   "private": true,
@@ -12,7 +12,8 @@
     "dist": "vite build && electron-builder --win",
     "start": "node server/index.js",
     "test": "node --test server/*.test.js",
-    "release": "vite build && electron-builder --win --publish never && node scripts/publish.mjs"
+    "release": "vite build && electron-builder --win --publish never && node scripts/publish.mjs",
+    "icon": "node scripts/make-icon.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -65,7 +66,7 @@
           ]
         }
       ],
-      "icon": "electron/icon.png"
+      "icon": "electron/icon.ico"
     },
     "nsis": {
       "oneClick": true,
