@@ -30,7 +30,7 @@ The installed app updates itself from GitHub Releases of the private repo `nicov
 To publish a release: bump `version` in package.json, commit and push, then:
 
 ```bash
-GH_TOKEN=$(gh auth token) npm run release   # builds the installer and uploads it + latest.yml to a GitHub release
+npm run release   # builds the installer, then uploads it + latest.yml to a GitHub release with the gh CLI
 ```
 
 ## Providers

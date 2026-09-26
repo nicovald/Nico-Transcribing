@@ -12,7 +12,7 @@
     "dist": "vite build && electron-builder --win",
     "start": "node server/index.js",
     "test": "node --test server/*.test.js",
-    "release": "vite build && electron-builder --win --publish always"
+    "release": "vite build && electron-builder --win --publish never && node scripts/publish.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -80,7 +80,8 @@
         "private": true,
         "releaseType": "release"
       }
-    ]
+    ],
+    "artifactName": "Grok-Transcriber-Setup-${version}.${ext}"
   },
   "repository": {
     "type": "git",

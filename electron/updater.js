@@ -15,7 +15,8 @@ export function createUpdater(getToken) {
   };
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Never install from a screenshot/smoke-test run; those quit automatically.
+  autoUpdater.autoInstallOnAppQuit = !process.env.SCREENSHOT;
   autoUpdater.on('checking-for-update', () => set({ status: 'checking', error: null }));
   autoUpdater.on('update-available', (info) => set({ status: 'downloading', version: info.version, progress: 0 }));
   autoUpdater.on('update-not-available', () => set({ status: 'current', checkedAt: new Date().toISOString() }));
