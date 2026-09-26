@@ -9,11 +9,11 @@
 //               verified: number|null, status: 'open'|'accepted'|'dismissed' }
 import { providers } from './providers/index.js';
 import { request } from './providers/http.js';
-import * as history from './history.js';
+import { readTranscript, updateTranscript } from './transcript.js';
 import { pickProofreader } from './proofreaders.js';
 import * as store from './store.js';
 import { glossaryCheck, termPicker } from './glossary.js';
-import { readCues, readSuggestions, readWords, resolveGlossary, resolveKeyterms, writeCues, writeSuggestions } from './jobs.js';
+import { readCues, readSuggestions, readWords, resolveGlossary, resolveKeyterms, isDeleting } from './jobs.js';
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -24,7 +24,7 @@ export function phraseRegex(from, flags = 'iu') {
 }
 
 export function replacePhrase(text, from, to, all = false) {
-  return text.replace(phraseRegex(from, all ? 'giu' : 'iu'), to);
+  return text.replace(phraseRegex(from, all ? 'giu' : 'iu'), () => to);
 }
 
 const containsPhrase = (text, from) => phraseRegex(from).test(text);
@@ -156,6 +156,7 @@ export async function proofread(cues, { proofreader, key, model, context, priori
   const queue = [...chunks];
   const worker = async () => {
     while (queue.length) {
+      signal?.throwIfAborted();
       const chunk = queue.shift();
       const fixes = await proofreadChunk(chunk, { proofreader, key, model, system, pickTerms, signal });
       for (const f of fixes) {
@@ -168,7 +169,9 @@ export async function proofread(cues, { proofreader, key, model, context, priori
       onProgress?.(++done / chunks.length);
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  const results = await Promise.allSettled([worker(), worker(), worker()]);
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed) throw failed.reason;
   return out;
 }
 
@@ -203,6 +206,7 @@ export async function verifyWithJev(items, { key, context, signal }) {
       });
       batch.forEach((s, n) => results.set(s.id, data.answers?.[`q${n}`]?.probabilities?.suggestion ?? null));
     } catch (err) {
+      if (signal?.aborted) throw signal.reason;
       if (err.status === 401) throw new Error('TypeSafe key was rejected. Check it in Settings.');
       batch.forEach((s) => results.set(s.id, null));
     }
@@ -212,153 +216,143 @@ export async function verifyWithJev(items, { key, context, signal }) {
 
 // ---------------------------------------------------------------- orchestration
 
-function mergeSuggestions(jobId, fresh, source) {
-  const existing = readSuggestions(jobId).filter((s) => s.source !== source || s.status !== 'open');
-  const seen = new Set(existing.map((s) => `${s.cueId}|${norm(s.from)}|${norm(s.to)}`));
-  let n = existing.reduce((max, s) => Math.max(max, Number(s.id.slice(2)) || 0), 0);
-  for (const s of fresh) {
-    const k = `${s.cueId}|${norm(s.from)}|${norm(s.to)}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    existing.push({ ...s, id: `s-${++n}`, verified: null, status: 'open' });
-  }
-  writeSuggestions(jobId, existing);
-  return existing;
+function mergeSuggestions(jobId, fresh, source, snapshot) {
+  const byId = new Map(snapshot.map(c => [c.id, c]));
+  return updateTranscript(jobId, state => {
+    const current = new Map(state.cues.map(c => [c.id, c]));
+    const existing = state.suggestions.filter(s => s.source !== source || s.status !== 'open');
+    const seen = new Set(existing.map(s => `${s.cueId}|${norm(s.from)}|${norm(s.to)}`));
+    for (const s of fresh) {
+      const cue = current.get(s.cueId), old = byId.get(s.cueId);
+      if (!cue || !old || cue.text !== old.text || cue.start !== old.start || cue.end !== old.end || !containsPhrase(cue.text, s.from)) continue;
+      const key = `${s.cueId}|${norm(s.from)}|${norm(s.to)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      existing.push({ ...s, id: `s-${crypto.randomUUID()}`, verified: null, status: 'open' });
+    }
+    state.suggestions = existing;
+  }).state.suggestions;
 }
 
-async function maybeVerify(job, project, settings) {
+async function maybeVerify(job, project, settings, signal) {
   const key = settings.keys.typesafe;
   if (!key) return;
-  const cues = new Map(readCues(job.id).map((c) => [c.id, c]));
-  const sorted = [...cues.values()].sort((a, b) => a.start - b.start);
-  const all = readSuggestions(job.id);
-  const todo = all.filter((s) => s.status === 'open' && s.verified == null && cues.has(s.cueId));
+  const cues = new Map(readCues(job.id).map(c => [c.id, c]));
+  const sorted = [...cues.values()].sort((a,b) => a.start-b.start);
+  const todo = readSuggestions(job.id).filter(s => s.status === 'open' && s.verified == null && cues.has(s.cueId));
   if (!todo.length) return;
-  const items = todo.map((s) => {
-    const idx = sorted.findIndex((c) => c.id === s.cueId);
-    const around = sorted.slice(Math.max(0, idx - 1), idx + 2).map((c) => c.text.replace(/\n/g, ' ')).join(' / ');
-    return { id: s.id, from: s.from, to: s.to, surrounding: around };
+  const items = todo.map(s => {
+    const idx = sorted.findIndex(c => c.id === s.cueId);
+    return { ...s, surrounding: sorted.slice(Math.max(0,idx-1),idx+2).map(c => c.text.replace(/\n/g,' ')).join(' / ') };
   });
-  const scores = await verifyWithJev(items, { key, context: project?.context });
-  for (const s of all) if (scores.has(s.id)) s.verified = scores.get(s.id);
-  writeSuggestions(job.id, all);
+  const scores = await verifyWithJev(items, { key, context: project?.context, signal });
+  signal.throwIfAborted();
+  updateTranscript(job.id, state => {
+    for (const s of state.suggestions) if (s.status === 'open' && scores.has(s.id)) s.verified = scores.get(s.id);
+  });
 }
 
-async function runStep(jobId, field, fn) {
+const checks = new Map();
+export const activeChecks = () => checks.size;
+export const isChecking = id => [...checks.keys()].some(key => key.startsWith(`${id}:`));
+export async function cancelChecks(id) {
+  const work = [...checks.entries()].filter(([key]) => key.startsWith(`${id}:`)).map(([,value]) => value);
+  for (const task of work) task.controller.abort(new Error('Check cancelled'));
+  await Promise.all(work.map(task => task.promise));
+}
+function runStep(jobId, field, fn) {
+  const key = `${jobId}:${field}`;
+  if (checks.has(key)) return checks.get(key).promise;
   const job = store.getJob(jobId);
+  if (!job || isDeleting(jobId)) return Promise.resolve();
+  const controller = new AbortController(), signal = controller.signal;
   job[field] = { ...job[field], status: 'running', error: null, progress: 0 };
   store.saveJob(job);
-  try {
-    const result = await fn(job, (p) => {
+  const promise = Promise.resolve().then(async () => {
+    try {
+      signal.throwIfAborted();
+      const result = await fn(job, p => {
+        const j = store.getJob(jobId);
+        if (j && !signal.aborted && !isDeleting(jobId)) { j[field] = { ...j[field], progress: p }; store.saveJob(j); }
+      }, signal);
+      signal.throwIfAborted();
       const j = store.getJob(jobId);
-      if (j) {
-        j[field].progress = p;
-        store.saveJob(j);
-      }
-    });
-    const j = store.getJob(jobId);
-    if (j) {
-      j[field] = { ...j[field], ...result, status: 'done', finishedAt: new Date().toISOString() };
-      store.saveJob(j);
-    }
-  } catch (err) {
-    const j = store.getJob(jobId);
-    if (j) {
-      j[field] = { ...j[field], status: 'error', error: err.message };
-      store.saveJob(j);
-    }
-  }
+      if (j && !isDeleting(jobId)) { j[field] = { ...j[field], ...result, status: 'done', finishedAt: new Date().toISOString() }; store.saveJob(j); }
+    } catch (err) {
+      const j = store.getJob(jobId);
+      if (j && !isDeleting(jobId)) { j[field] = { ...j[field], status: signal.aborted ? 'cancelled' : 'error', error: err.message }; store.saveJob(j); }
+    } finally { checks.delete(key); }
+  });
+  checks.set(key, { controller, promise });
+  return promise;
 }
-
 export function startProofread(jobId) {
-  return runStep(jobId, 'proofread', async (job, onProgress) => {
-    const settings = store.getSettings();
-    const proofreader = pickProofreader(settings);
+  return runStep(jobId, 'proofread', async (job, onProgress, signal) => {
+    const settings = store.getSettings(), proofreader = pickProofreader(settings);
     if (!proofreader) throw new Error('AI proofread needs a Claude, OpenAI or xAI key. Add one in Settings.');
     const model = settings.proofread.models?.[proofreader.id] || proofreader.defaultModel;
-    const project = store.getProject(job.projectId);
-    const found = await proofread(readCues(job.id), {
-      proofreader,
-      key: settings.keys[proofreader.keyName],
-      model,
-      context: project?.context,
-      priorityTerms: resolveKeyterms(job.options, settings).split(', ').filter(Boolean),
-      glossary: resolveGlossary(job.options, settings),
-      onProgress,
+    const project = store.getProject(job.projectId), snapshot = readCues(job.id);
+    const found = await proofread(snapshot, {
+      proofreader, key: settings.keys[proofreader.keyName], model, context: project?.context,
+      priorityTerms: resolveKeyterms(job.options,settings).split(', ').filter(Boolean),
+      glossary: resolveGlossary(job.options,settings), onProgress, signal,
     });
-    mergeSuggestions(job.id, found, 'ai');
-    await maybeVerify(job, project, settings);
-    return { count: found.length, by: `${proofreader.name} · ${model}` };
+    signal.throwIfAborted();
+    const merged = mergeSuggestions(job.id, found, 'ai', snapshot);
+    await maybeVerify(job,project,settings,signal);
+    return { count: merged.filter(s => s.source === 'ai' && s.status === 'open').length, by: `${proofreader.name} · ${model}` };
   });
 }
-
-// Free sound-alike check against the selected term lists' full glossaries.
 export function runGlossaryCheck(jobId) {
-  return runStep(jobId, 'glossary', async (job) => {
-    const settings = store.getSettings();
-    const terms = resolveGlossary(job.options, settings);
-    if (!terms.length) return { count: 0, terms: 0 };
-    const found = glossaryCheck(readCues(job.id), terms).map((f) => ({ ...f, source: 'glossary', sourceLabel: 'Glossary' }));
-    mergeSuggestions(job.id, found, 'glossary');
-    await maybeVerify(job, store.getProject(job.projectId), settings);
+  return runStep(jobId, 'glossary', async (job,onProgress,signal) => {
+    const settings = store.getSettings(), terms = resolveGlossary(job.options,settings), snapshot = readCues(job.id);
+    const found = glossaryCheck(snapshot,terms).map(f => ({ ...f, source: 'glossary', sourceLabel: 'Glossary' }));
+    mergeSuggestions(job.id,found,'glossary',snapshot);
+    await maybeVerify(job,store.getProject(job.projectId),settings,signal);
     return { count: found.length, terms: terms.length };
   });
 }
-
-// Cross-check `jobId` against the words of `otherJobId` (same tracks, other provider).
-export function applyCompare(jobId, otherJobId) {
-  return runStep(jobId, 'compare', async (job) => {
+export function applyCompare(jobId,otherJobId) {
+  return runStep(jobId,'compare',async (job,onProgress,signal) => {
     const other = store.getJob(otherJobId);
     if (!other) throw new Error('Comparison transcript was deleted.');
-    const wordsByTrack = {};
-    job.tracks.forEach((t, pos) => {
-      const otherPos = other.tracks.findIndex((o) => o.mediaId === t.mediaId && o.index === t.index);
-      if (otherPos >= 0) wordsByTrack[pos] = readWords(other.id, otherPos) || [];
+    const wordsByTrack = {}, snapshot = readCues(job.id);
+    job.tracks.forEach((t,pos) => {
+      const otherPos = other.tracks.findIndex(o => o.mediaId === t.mediaId && o.index === t.index);
+      if (otherPos >= 0) wordsByTrack[pos] = readWords(other.id,otherPos) || [];
     });
     const label = providers[other.provider]?.name || other.provider;
-    const found = compareWords(readCues(job.id), wordsByTrack, label);
-    mergeSuggestions(job.id, found, 'compare');
-    const settings = store.getSettings();
-    await maybeVerify(job, store.getProject(job.projectId), settings);
+    const found = compareWords(snapshot,wordsByTrack,label);
+    mergeSuggestions(job.id,found,'compare',snapshot);
+    await maybeVerify(job,store.getProject(job.projectId),store.getSettings(),signal);
     return { count: found.length, jobId: other.id, provider: other.provider };
   });
 }
-
-// Accept a suggestion on its own cue, or everywhere the same phrase occurs.
-export function acceptSuggestion(jobId, suggestionId, { all = false, to } = {}) {
-  const suggestions = readSuggestions(jobId);
-  const s = suggestions.find((x) => x.id === suggestionId);
-  if (!s) throw new Error('Suggestion not found');
-  const replacement = to?.trim() || s.to;
-  const cues = readCues(jobId);
-  const targets = cues.filter((cue) => (all || cue.id === s.cueId) && containsPhrase(cue.text, s.from));
-  history.record(jobId, `${all && targets.length > 1 ? `Fix all ${targets.length}` : 'Fix'}: "${s.from}" → "${replacement}"`, {
-    cueIds: targets.map((c) => c.id),
-    withSuggestions: true,
-  });
-  const changed = [];
-  for (const cue of cues) {
-    if (!(all || cue.id === s.cueId) || !containsPhrase(cue.text, s.from)) continue;
-    cue.text = replacePhrase(cue.text, s.from, replacement, true);
-    cue.edited = true;
-    changed.push(cue);
-  }
-  writeCues(jobId, cues);
-  for (const x of suggestions) {
-    const sameFix = norm(x.from) === norm(s.from) && x.status === 'open';
-    if (x.id === s.id || (all && sameFix)) x.status = 'accepted';
-  }
-  writeSuggestions(jobId, suggestions);
-  return { cues: changed, suggestions };
+const fixGroup = s => [s.from,s.to].map(v => v.trim().replace(/\s+/g,' ').toLowerCase()).join('|');
+export function reconcileSuggestions(state) {
+  const cues = new Map(state.cues.map(c => [c.id,c]));
+  for (const s of state.suggestions) if (s.status === 'open' && (!cues.has(s.cueId) || !containsPhrase(cues.get(s.cueId).text,s.from))) s.status = 'stale';
 }
-
-export function dismissSuggestion(jobId, suggestionId) {
-  const suggestions = readSuggestions(jobId);
-  const s = suggestions.find((x) => x.id === suggestionId);
-  if (s) {
-    history.record(jobId, `Ignore: "${s.from}" → "${s.to}"`, { withSuggestions: true });
-    s.status = 'dismissed';
-  }
-  writeSuggestions(jobId, suggestions);
-  return suggestions;
+export function acceptSuggestion(jobId,suggestionId,{all=false,to}={}) {
+  const s = readSuggestions(jobId).find(x => x.id === suggestionId && x.status === 'open');
+  if (!s) throw new Error('This suggestion is no longer available.');
+  if (to != null && typeof to !== 'string') throw new Error('The replacement must be text.');
+  const replacement = to?.trim() || s.to;
+  const { state, result: changed } = updateTranscript(jobId,state => {
+    const matching = state.suggestions.filter(x => x.status === 'open' && (all ? fixGroup(x) === fixGroup(s) : x.id === s.id));
+    const ids = new Set(matching.map(x => x.cueId));
+    const targets = state.cues.filter(c => ids.has(c.id) && containsPhrase(c.text,s.from));
+    if (!targets.length) throw new Error('This line has changed. The suggestion no longer applies.');
+    for (const cue of targets) { cue.text = replacePhrase(cue.text,s.from,replacement,true); cue.edited = true; }
+    for (const x of matching) x.status = 'accepted';
+    reconcileSuggestions(state);
+    return targets;
+  }, `${all ? 'Fix matching lines' : 'Fix'}: "${s.from}" → "${replacement}"`);
+  return { cues: changed, suggestions: state.suggestions };
+}
+export function dismissSuggestion(jobId,suggestionId) {
+  return updateTranscript(jobId,state => {
+    const s = state.suggestions.find(x => x.id === suggestionId);
+    if (s?.status === 'open') s.status = 'dismissed';
+  }, 'Ignore suggestion').state.suggestions;
 }

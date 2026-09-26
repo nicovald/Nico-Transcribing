@@ -6,6 +6,16 @@ import usePoll from './usePoll.js';
 
 // Unsent setup choices per project, kept while you visit other pages.
 const drafts = new Map();
+const setupTasks = new Map();
+function persistSetup(projectId, setup) {
+  desktop?.setUnsaved(`setup:${projectId}`, true);
+  const task = (setupTasks.get(projectId) || Promise.resolve()).catch(() => {}).then(() => api.patch(`/api/projects/${projectId}`, { setup }));
+  setupTasks.set(projectId, task);
+  task.then(() => {
+    if (setupTasks.get(projectId) === task) { setupTasks.delete(projectId); desktop?.setUnsaved(`setup:${projectId}`, false); }
+  }, () => {});
+  return task;
+}
 const NEW_PRESET = '__new__';
 
 const listSize = (l) =>
@@ -55,7 +65,12 @@ export default function Project({ projectId }) {
     else fileInput.current.click();
   };
 
-  const patchProject = (patch) => act(async () => setProject({ ...project, ...(await api.patch(`/api/projects/${project.id}`, patch)) }));
+  const patchProject = (patch) => act(async () => {
+    if ('presetId' in patch) await setupTasks.get(project.id);
+    const next = await api.patch(`/api/projects/${project.id}`, patch);
+    if ('presetId' in patch) for (const key of drafts.keys()) if (key.startsWith(`${project.id}:`)) drafts.delete(key);
+    setProject({ ...project, ...next });
+  });
   const renameMedia = (m, displayName) => act(() => api.patch(`/api/media/${m.id}`, { displayName }));
   const removeMedia = (m) => {
     if (window.confirm(`Remove "${m.displayName}" from this project? The video file itself is not touched.`)) act(() => api.del(`/api/media/${m.id}`));
@@ -164,9 +179,9 @@ export default function Project({ projectId }) {
             {project.jobs.map((j) => (
               <li key={j.id} onClick={() => navigate(`/jobs/${j.id}`)}>
                 <div className="grow">
-                  <div className="title">
+                  <a className="title" href={`#/jobs/${j.id}`}>
                     {providers.transcribers.find((p) => p.id === j.provider)?.name || j.provider} · {j.trackCount} track{j.trackCount === 1 ? '' : 's'}
-                  </div>
+                  </a>
                   <div className="muted small">
                     {j.model} · {new Date(j.createdAt).toLocaleString()}
                   </div>
@@ -218,7 +233,7 @@ function TrackPreview({ src }) {
       previewAudio.currentTime = state.time || 0;
     }
     previewAudio.ontimeupdate = () => setState({ playing: !previewAudio.paused, time: previewAudio.currentTime });
-    previewAudio.play();
+    previewAudio.play().catch(() => setState(s => ({ ...s, playing: false, error: 'Audio could not play. Try importing this video again.' })));
     setState((s) => ({ ...s, playing: true }));
   };
 
@@ -232,6 +247,7 @@ function TrackPreview({ src }) {
       <button className="small-btn" onClick={toggle}><Icon name={state.playing ? 'pause' : 'play'} size={12} /> {state.playing ? 'Pause' : 'Listen'}</button>
       {state.playing && <button className="ghost small-btn" title="Skip ahead 60s" onClick={() => skip(60)}>+60s</button>}
       <span className="muted small">{formatTime(state.time)}</span>
+      {state.error && <span className="error-text small">{state.error}</span>}
     </div>
   );
 }
@@ -252,13 +268,13 @@ function ContextInput({ value, onSave }) {
 
 function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
   const { reloadSettings } = useApp();
-  const preset = settings.presets.find((p) => p.id === project.presetId) ?? null;
+  const preset = project.presetSnapshot ?? settings.presets.find((p) => p.id === project.presetId) ?? null;
   const draftKey = `${project.id}:${project.presetId || ''}`;
   // Defaults come from the project's preset, otherwise from what you used last time.
   const base = preset ?? { ...settings.lastOptions };
   const [draft, setDraftState] = useState(
     () =>
-      drafts.get(draftKey) ?? {
+      drafts.get(draftKey) ?? project.setup ?? {
         tracks: {}, // key -> { on, label }
         provider: base.provider || settings.lastOptions.provider,
         options: {
@@ -280,13 +296,19 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
   }, [presetRequest]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [saveState, setSaveState] = useState('Saved to this project');
 
-  const setDraft = (fn) =>
-    setDraftState((d) => {
-      const next = fn(d);
-      drafts.set(draftKey, next);
-      return next;
-    });
+  const saveSetup = async next => {
+    setSaveState('Saving setup…');
+    try { await persistSetup(project.id,next); setSaveState('Saved to this project'); return true; }
+    catch (err) { setError(err.message); setSaveState('Setup not saved'); return false; }
+  };
+  const setDraft = fn => {
+    const next = fn(draft);
+    drafts.set(draftKey, next);
+    setDraftState(next);
+    saveSetup(next);
+  };
 
   const ready = project.media.filter((m) => m.status === 'ready');
   const trackState = (m, t) =>
@@ -318,6 +340,8 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
   });
 
   const savePreset = async (asNew) => {
+    setError(null);
+    try {
     const name = asNew ? saving?.name?.trim() : preset.name;
     if (!name) return;
     const id = asNew ? crypto.randomUUID() : preset.id;
@@ -327,14 +351,16 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
     setSaving(null);
     drafts.delete(draftKey);
     if (asNew) onPresetSaved(id);
+    } catch (err) { setError(err.message); }
   };
 
   const start = async () => {
     setBusy(true);
     setError(null);
     try {
+      if (!(await saveSetup({ ...draft, tracks: Object.fromEntries(ready.flatMap(m => m.tracks.map(t => [trackKey(m.id,t.index),trackState(m,t)]))) }))) { setBusy(false); return; }
       const job = await api.post('/api/jobs', { projectId: project.id, provider: draft.provider, tracks: chosen, options: draft.options });
-      drafts.delete(draftKey);
+      await reloadSettings();
       navigate(`/jobs/${job.id}`);
     } catch (err) {
       setError(err.message);
@@ -344,7 +370,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
 
   return (
     <section className="card">
-      <h2>Transcribe</h2>
+      <div className="row"><h2 className="grow">Transcribe</h2><span className="muted small" role="status">{saveState}</span>{saveState === 'Setup not saved' && <button onClick={() => saveSetup(draft)}>Retry save</button>}</div>
       <p className="muted small">Tick the tracks to transcribe and name them (e.g. "Sundee mic", "Game audio"). Names are used in file names and merged subtitles.</p>
 
       {ready.map((m) => (
@@ -354,8 +380,8 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
             const st = trackState(m, t);
             return (
               <div key={t.index} className={`track ${st.on ? '' : 'off'}`}>
-                <input type="checkbox" checked={st.on} onChange={(e) => setTrack(m, t, { on: e.target.checked })} />
-                <input className="label-input" value={st.label} onChange={(e) => setTrack(m, t, { label: e.target.value })} />
+                <input aria-label={`Transcribe track ${t.index + 1} of ${m.displayName}`} type="checkbox" checked={st.on} onChange={(e) => setTrack(m, t, { on: e.target.checked })} />
+                <input aria-label={`Track ${t.index + 1} name`} className="label-input" value={st.label} onChange={(e) => setTrack(m, t, { label: e.target.value })} />
                 <span className="muted small">
                   #{t.index + 1} · {t.channels === 1 ? 'mono' : t.channels === 2 ? 'stereo' : `${t.channels}ch`}
                   {t.language && ` · ${t.language}`}

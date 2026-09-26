@@ -35,11 +35,14 @@ export async function request(url, { signal, ...init } = {}) {
 
 export const sleep = (ms, signal) =>
   new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
+    if (signal?.aborted) return reject(signal.reason ?? new Error('Aborted'));
+    const done = () => { signal?.removeEventListener('abort', abort); resolve(); };
+    const t = setTimeout(done, ms);
+    const abort = () => {
       clearTimeout(t);
       reject(signal.reason ?? new Error('Aborted'));
-    }, { once: true });
+    };
+    signal?.addEventListener('abort', abort, { once: true });
   });
 
 // Parse the comma/newline separated keyterm setting into a clean list.

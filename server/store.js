@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isId, validateId, validateSettings } from './validation.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
@@ -9,6 +10,19 @@ export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 export const MEDIA_DIR = path.join(DATA_DIR, 'media');
 export const JOBS_DIR = path.join(DATA_DIR, 'jobs');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+let secrets = null;
+const SECRET_PREFIX = 'protected:v1:';
+
+// Electron supplies Windows-backed encryption after app.whenReady().
+export function configureSecrets(codec) {
+  secrets = codec;
+  const saved = readJson(SETTINGS_FILE, {});
+  if (Object.values(saved.keys || {}).some(k => k && !k.startsWith(SECRET_PREFIX))) {
+    saveSettings({});
+    // Do not retain a plaintext backup after migrating keys.
+    fs.copyFileSync(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);
+  }
+}
 
 for (const dir of [DATA_DIR, PROJECTS_DIR, MEDIA_DIR, JOBS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
@@ -42,17 +56,33 @@ export const DEFAULT_SETTINGS = {
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
+  } catch (err) {
+    if (err.code === 'ENOENT') return fallback;
+    if (!(err instanceof SyntaxError)) throw err;
+    try {
+      const backup = JSON.parse(fs.readFileSync(`${file}.bak`, 'utf8'));
+      fs.copyFileSync(file, `${file}.damaged-${Date.now()}`);
+      fs.copyFileSync(`${file}.bak`, file);
+      console.warn(`Recovered ${path.basename(file)} from its backup.`);
+      return backup;
+    } catch {
+      throw new Error(`The saved ${path.basename(file)} could not be read. Keep your data folder and contact your administrator; no data was overwritten.`);
+    }
   }
 }
 
 // Write to a temp file then rename so a crash mid-write never corrupts state.
 export function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
-  fs.renameSync(tmp, file);
+  const tmp = `${file}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
+    if (fs.existsSync(file)) {
+      JSON.parse(fs.readFileSync(file, 'utf8'));
+      fs.copyFileSync(file, `${file}.bak`);
+    }
+    fs.renameSync(tmp, file);
+  } finally { fs.rmSync(tmp, { force: true }); }
 }
 export { readJson };
 
@@ -60,6 +90,12 @@ const OBJECT_KEYS = ['keys', 'models', 'lastOptions', 'proofread', 'cue'];
 
 export function getSettings() {
   const saved = readJson(SETTINGS_FILE, {});
+  if (saved.keys) saved.keys = Object.fromEntries(Object.entries(saved.keys).map(([id,key]) => {
+    if (!key.startsWith(SECRET_PREFIX)) return [id,key];
+    if (!secrets) throw new Error('These API keys are protected by the desktop app. Open Grok Transcriber with the Windows account that saved them.');
+    try { return [id,secrets.decrypt(key.slice(SECRET_PREFIX.length))]; }
+    catch { throw new Error('Windows could not unlock the saved API keys. Use the Windows account that saved them, or ask your administrator to reset settings.json.'); }
+  }));
   const merged = { ...DEFAULT_SETTINGS, ...saved };
   for (const k of OBJECT_KEYS) merged[k] = { ...DEFAULT_SETTINGS[k], ...saved[k] };
   // Settings from v0.1 kept these at the top level.
@@ -68,17 +104,19 @@ export function getSettings() {
 }
 
 export function saveSettings(patch) {
+  validateSettings(patch);
   const current = getSettings();
   const next = { ...current, ...patch };
   for (const k of OBJECT_KEYS) next[k] = { ...current[k], ...patch[k] };
   for (const k of ['defaultProvider', 'language', 'keyterms', 'voiceCleanup', 'fillerWords', 'diarize']) delete next[k];
-  writeJson(SETTINGS_FILE, next);
+  const disk = secrets ? { ...next, keys: Object.fromEntries(Object.entries(next.keys).map(([id,key]) => [id,key ? SECRET_PREFIX + secrets.encrypt(key) : ''])) } : next;
+  writeJson(SETTINGS_FILE, disk);
   return next;
 }
 
 // ---- generic per-id JSON collections ----
 function collection(dir, file) {
-  const dirOf = (id) => path.join(dir, id);
+  const dirOf = (id) => path.join(dir, validateId(id));
   const get = (id) => readJson(path.join(dirOf(id), file), null);
   return {
     dir: dirOf,
@@ -87,6 +125,7 @@ function collection(dir, file) {
     list: () =>
       fs
         .readdirSync(dir)
+        .filter(isId)
         .map(get)
         .filter(Boolean)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),

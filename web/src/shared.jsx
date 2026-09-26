@@ -36,7 +36,7 @@ export function Progress({ value }) {
 }
 
 export function StatusPill({ status }) {
-  const label = { queued: 'Queued', importing: 'Importing…', running: 'Working…', done: 'Done', ready: 'Ready', error: 'Failed', cancelled: 'Cancelled' }[status] || status;
+  const label = { queued: 'Queued', importing: 'Importing…', running: 'Working…', done: 'Done', partial: 'Partly complete', ready: 'Ready', error: 'Failed', cancelled: 'Cancelled' }[status] || status;
   return <span className={`pill pill-${status}`}>{label}</span>;
 }
 

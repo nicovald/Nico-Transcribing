@@ -2,6 +2,16 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.8.0 (2026-09-26)
+- Desktop workspace improvements: searchable/sortable project library, sectioned settings, visible save states, persistent project track choices and preset snapshots.
+- Faster review: J/K issue navigation, playback speed, explicit line save/cancel, retained text after failed saves, and pagination for long transcripts.
+- Export preview with file selection, duplicate filename protection and Keep both / Replace choices. Partial track failures have a distinct status.
+- Atomic transcript/suggestion/undo storage with last-good backups; stale check results cannot overwrite edited lines or resurrect accepted suggestions. Fix all affects exactly the matching flagged lines.
+- Reliable cancellation/deletion for imports, jobs and checks; four concurrent tracks across the app; completed transcription chunks reused on retry.
+- Preserve audio stream timing on new imports; validate IDs, track ownership, settings and cue timing; handle interrupted uploads without crashing.
+- Windows-protected API keys, isolated desktop API session, remembered window size and guards against closing/restarting with active work or unsaved changes.
+- Added backend regression tests and a real Electron interaction/screenshot smoke test. Node minimum aligned to 22.19.
+
 ## 0.7.1 (2026-09-26)
 - New app icon (speech bubble with sound wave and subtitle lines), and it now actually shows on the .exe, shortcut and taskbar. Before, Windows showed a generic icon because the generated .ico used PNG for every size.
 

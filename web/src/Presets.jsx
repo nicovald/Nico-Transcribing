@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
 import { Icon, LANGUAGES } from './shared.jsx';
+import useUnsaved from './useUnsaved.js';
 
 const blank = (settings) => ({
   id: crypto.randomUUID(),
@@ -22,6 +23,7 @@ export default function Presets() {
   const { settings, providers, reloadSettings } = useApp();
   const [presets, setPresets] = useState(settings.presets);
   const [status, setStatus] = useState(null);
+  useUnsaved(JSON.stringify(presets) !== JSON.stringify(settings.presets));
   const timer = useRef();
   const first = useRef(true);
 

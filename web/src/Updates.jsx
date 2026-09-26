@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
 import { desktop, Icon, Progress } from './shared.jsx';
+import useUnsaved from './useUnsaved.js';
 
 const TOKEN_URL =
   'https://github.com/settings/personal-access-tokens/new?name=Grok+Transcriber+updates&description=Lets+Grok+Transcriber+download+new+versions&expires_in=none';
@@ -25,6 +26,8 @@ export default function Updates() {
   const [update, setUpdate] = useState(null);
   const [token, setToken] = useState(settings.keys.github || '');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useUnsaved(token !== settings.keys.github || busy);
 
   useEffect(() => {
     let stop = false;
@@ -42,13 +45,15 @@ export default function Updates() {
 
   const saveAndCheck = async () => {
     setBusy(true);
+    setError(null);
     try {
       if (token !== settings.keys.github) {
-        await api.put('/api/settings', { keys: { github: token } });
+        const saved = await api.put('/api/settings', { keys: { github: token } });
+        setToken(saved.keys.github);
         await reloadSettings();
       }
       setUpdate(await api.post('/api/update/check'));
-    } finally {
+    } catch (err) { setError(err.message); } finally {
       setBusy(false);
     }
   };
@@ -90,9 +95,10 @@ export default function Updates() {
         </span>
       </label>
       <div className={`update-status ${update?.status === 'error' ? 'error-text' : ''}`}>{updateMessage(update)}</div>
+      {error && <div className="error">{error}</div>}
       {update?.status === 'downloading' && <Progress value={update.progress} />}
       {update?.status === 'ready' && (
-        <button type="button" className="primary" onClick={() => api.post('/api/update/install')}>
+        <button type="button" className="primary" onClick={() => api.post('/api/update/install').catch(err => setError(err.message))}>
           Restart and update to {update.version}
         </button>
       )}

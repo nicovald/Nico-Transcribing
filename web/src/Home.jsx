@@ -8,7 +8,9 @@ const busy = (p) => p.media.some((m) => m.status === 'importing' || m.status ===
 
 export default function Home({ active }) {
   const { addFiles, addPaths, dataVersion, settings } = useApp();
-  const [projects, setProjects, refresh] = usePoll(() => api.get('/api/projects'), (list) => active && list.some(busy), 2000, [dataVersion, active]);
+  const [projects, setProjects, refresh, loadError] = usePoll(() => api.get('/api/projects'), (list) => active && list.some(busy), 2000, [dataVersion, active]);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('newest');
   const [error, setError] = useState(null);
   const [pathInput, setPathInput] = useState('');
   const [presetId, setPresetId] = useState(() => (settings.presets.some((p) => p.id === settings.lastPresetId) ? settings.lastPresetId : ''));
@@ -47,6 +49,7 @@ export default function Home({ active }) {
 
   return (
     <div className="stack">
+      <div className="page-head"><h1>Projects</h1><p className="muted">From source footage to reviewed subtitles, all in one place.</p></div>
       {settings.presets.length > 0 && (
         <div className="preset-bar">
           <span className="muted">New projects use</span>
@@ -98,16 +101,17 @@ export default function Home({ active }) {
       )}
 
       {error && <div className="error">{error}</div>}
+      {loadError && <div className="error">{loadError} <button onClick={refresh}>Try again</button></div>}
 
       <section>
-        <h2>Projects</h2>
+        <div className="row library-toolbar"><h2 className="grow">Your library <span className="muted small">{projects?.length || 0} projects</span></h2><input aria-label="Search projects" placeholder="Search projects…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Sort projects" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest first</option><option value="name">Name A–Z</option></select></div>
         {!projects ? (
           <p className="muted">Loading…</p>
         ) : !projects.length ? (
           <p className="muted">No projects yet. Drop a video above to get started.</p>
         ) : (
           <ul className="list">
-            {projects.map((p) => {
+            {projects.filter(p => p.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name) : b.createdAt.localeCompare(a.createdAt)).map((p) => {
               const tracks = p.media.reduce((n, m) => n + m.tracks.length, 0);
               const duration = Math.max(0, ...p.media.map((m) => m.duration || 0));
               const latest = p.jobs[0];
@@ -115,7 +119,7 @@ export default function Home({ active }) {
                 <li key={p.id} onClick={() => navigate(`/projects/${p.id}`)}>
                   <div className="grow">
                     <div className="title">
-                      <EditableText value={p.name} onSave={(name) => rename(p, name)} />
+                      <a href={`#/projects/${p.id}`}>{p.name}</a>
                     </div>
                     <div className="muted small">
                       {p.media.length} video{p.media.length === 1 ? '' : 's'} · {tracks} audio track{tracks === 1 ? '' : 's'}
@@ -130,7 +134,7 @@ export default function Home({ active }) {
                   ) : latest ? (
                     <StatusPill status={latest.status} />
                   ) : null}
-                  <button className="icon-btn" title="Delete project" onClick={(e) => remove(e, p)}>
+                  <button className="icon-btn" title="Delete project" onClick={(e) => run(() => remove(e, p))}>
                     <Icon name="trash" />
                   </button>
                 </li>

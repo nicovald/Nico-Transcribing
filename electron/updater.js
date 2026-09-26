@@ -8,7 +8,7 @@ const { autoUpdater } = updaterPkg;
 export const REPO = { owner: 'nicovald', repo: 'Video-Transcribing' };
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 
-export function createUpdater(getToken) {
+export function createUpdater(getToken, prepareExit = async () => true) {
   let state = { status: app.isPackaged ? 'idle' : 'dev', version: null, progress: null, error: null, checkedAt: null };
   const set = (patch) => {
     state = { ...state, ...patch };
@@ -16,7 +16,7 @@ export function createUpdater(getToken) {
 
   autoUpdater.autoDownload = true;
   // Never install from a screenshot/smoke-test run; those quit automatically.
-  autoUpdater.autoInstallOnAppQuit = !process.env.SCREENSHOT;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.on('checking-for-update', () => set({ status: 'checking', error: null }));
   autoUpdater.on('update-available', (info) => set({ status: 'downloading', version: info.version, progress: 0 }));
   autoUpdater.on('update-not-available', () => set({ status: 'current', checkedAt: new Date().toISOString() }));
@@ -51,9 +51,10 @@ export function createUpdater(getToken) {
   return {
     status: () => ({ ...state, current: app.getVersion() }),
     check: async () => ({ ...(await check()), current: app.getVersion() }),
-    install: () => {
-      if (state.status === 'ready') setImmediate(() => autoUpdater.quitAndInstall(true, true));
-      return state.status === 'ready';
+    install: async () => {
+      if (state.status !== 'ready' || process.env.SCREENSHOT || !(await prepareExit())) return false;
+      setImmediate(() => autoUpdater.quitAndInstall(true, true));
+      return true;
     },
   };
 }

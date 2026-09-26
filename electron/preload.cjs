@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('desktop', {
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   showItemInFolder: (p) => ipcRenderer.invoke('show-item', p),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  setUnsaved: (id, value) => ipcRenderer.send('unsaved', id, Boolean(value)),
 });

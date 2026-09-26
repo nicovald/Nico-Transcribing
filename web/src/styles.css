@@ -326,3 +326,43 @@ mark.suspect { background: var(--warn-soft); color: inherit; border-radius: 4px;
 
 /* Links with a trailing icon ("Get a key ↗") stay on one line. */
 a:has(> .icon) { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+/* Desktop workspace: stable navigation, compact controls and explicit save states. */
+[hidden] { display: none !important; }
+main { max-width: 1440px; }
+.app-activity { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.library-toolbar { margin-bottom: 14px; }
+.library-toolbar h2 .small { margin-left: 10px; font-weight: 500; }
+.settings-layout { display: grid; grid-template-columns: 200px minmax(0,1fr); gap: 28px; align-items: start; }
+.settings-nav { position: sticky; top: 88px; display: flex; flex-direction: column; gap: 5px; }
+.settings-nav button { justify-content: flex-start; background: none; border: 0; box-shadow: none; color: var(--text-2); }
+.settings-nav button.selected { background: var(--accent-soft); color: var(--accent); }
+.settings-content { max-width: 920px; }
+.settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.settings-fields .card { gap: 20px; }
+.service-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.service-card summary { padding: 16px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface-2); }
+.service-card summary strong::before { content: '›'; display: inline-block; width: 20px; color: var(--muted); }
+.service-card[open] summary strong::before { content: '⌄'; }
+.service-card .key-row { padding: 18px; margin: 0; border: 0; }
+.save-bar { position: sticky; bottom: 16px; z-index: 12; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; box-shadow: var(--shadow); }
+.pill-partial, .pill-cancelled { color: #8a5800; background: var(--warn-soft); }
+.review-layout { grid-template-columns: minmax(0,1fr) 300px; }
+.review-controls { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.review-controls select { min-height: 30px; font-size: 12px; padding: 3px 8px; }
+kbd { font: 11px var(--mono); background: var(--surface-2); border: 1px solid var(--line); padding: 1px 4px; border-radius: 3px; }
+button.cue-text { display: block; text-align: left; white-space: normal; min-height: 0; border: 0; background: transparent; box-shadow: none; width: calc(100% + 12px); }
+button.cue-text:active { transform: none; }
+.cue.selected-cue { background: var(--accent-soft); }
+.cue:focus-within .cue-actions, .list li:focus-within .icon-btn { opacity: 1; }
+.pagination { padding: 16px 4px; }
+.pagination .grow { text-align: center; font-size: 12px; }
+.export-dialog { width: min(760px,90vw); max-height: 85vh; overflow: auto; border: 1px solid var(--line); border-radius: 18px; color: var(--text); padding: 28px; box-shadow: var(--shadow-lift); }
+.export-dialog::backdrop { background: rgba(15,42,68,.4); backdrop-filter: blur(3px); }
+.export-files { max-height: 42vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.export-file { display: flex; flex-direction: row; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); gap: 12px; }
+.export-file:last-child { border: 0; }
+.export-file strong { overflow-wrap: anywhere; }
+.export-file small { display: block; color: var(--muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 430px; }
+@media (max-width: 1050px) { .app-activity { display: none; } .toolbar { flex-wrap: wrap; } .review-layout { grid-template-columns: minmax(0,1fr) 270px; } .side { position: sticky; order: 0; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

@@ -3,6 +3,8 @@ import { api, formatTime } from './api.js';
 import { useApp } from './App.jsx';
 import { desktop, Icon, Progress, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
+import useUnsaved from './useUnsaved.js';
+import ExportDialog from './ExportDialog.jsx';
 
 const TRACK_COLORS = ['#126ce0', '#e0701a', '#1a9e5c', '#8b4fd8', '#c99a0a', '#0f9bb0', '#d6407a', '#5b6b7d'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
@@ -30,13 +32,20 @@ export default function Review({ jobId }) {
   const [actionError, setActionError] = useState(null);
   const [showUnlikely, setShowUnlikely] = useState(false);
   const [pickedLists, setPickedLists] = useState(null);
+  const [exportPlan, setExportPlan] = useState(null);
+  const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [speed, setSpeed] = useState(() => Number(localStorage.getItem('playback-speed')) || 1);
+  const [pending, setPending] = useState(false);
+  const [editingCue, setEditingCue] = useState(null);
+  const actionLock = useRef(false);
   const audio = useRef();
   const stopAt = useRef(null);
   const toastTimer = useRef();
 
   const doneCount = job?.tracks.filter((t) => t.status === 'done').length ?? 0;
   useEffect(() => {
-    if (doneCount) api.get(`/api/jobs/${jobId}/srt-files`).then(setFiles);
+    if (doneCount) api.get(`/api/jobs/${jobId}/srt-files`).then(setFiles).catch(err => setActionError(err.message));
   }, [jobId, doneCount]);
 
   const threshold = settings.confidenceThreshold;
@@ -75,22 +84,48 @@ export default function Review({ jobId }) {
   };
 
   const act = async (fn) => {
+    if (actionLock.current) return false;
+    actionLock.current = true; setPending(true);
     setActionError(null);
     try {
       await fn();
+      return true;
     } catch (err) {
       setActionError(err.message);
-    }
+      return false;
+    } finally { actionLock.current = false; setPending(false); }
   };
+  useUnsaved(pending);
+  useEffect(() => setPage(0), [trackFilter, show, search]);
+  useEffect(() => setPage(p => Math.min(p,Math.max(0,Math.ceil(cues.length/100)-1))), [cues.length]);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  const jumpIssue = direction => {
+    if (editingCue) return;
+    const current = cues.findIndex(c => c.id === selected);
+    const issues = cues.map((c,i) => hasIssue(c) ? i : -1).filter(i => i >= 0);
+    const index = direction > 0 ? issues.find(i => i > current) ?? issues[0] : issues.findLast(i => i < current) ?? issues.at(-1);
+    if (index == null) return;
+    setPage(Math.floor(index / 100)); setSelected(cues[index].id);
+    requestAnimationFrame(() => { const row = document.getElementById(`cue-${cues[index].id}`); row?.scrollIntoView({ block: 'center' }); row?.querySelector('.tc')?.focus({ preventScroll: true }); });
+  };
+  useEffect(() => {
+    const onKey = e => {
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || e.ctrlKey || e.metaKey || e.altKey || exportPlan) return;
+      if (e.key.toLowerCase() === 'j' || e.key.toLowerCase() === 'k') { e.preventDefault(); jumpIssue(e.key.toLowerCase() === 'j' ? 1 : -1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [cues, selected, exportPlan, editingCue]);
 
   const undo = useCallback(
     () =>
       act(async () => {
+        if (editingCue) return;
         const r = await api.post(`/api/jobs/${jobId}/undo`);
         setJob((j) => ({ ...j, cues: r.cues, suggestions: r.suggestions, undoCount: r.undoCount, undoLabel: r.undoLabel }));
         say(`Undid: ${r.label}`);
       }),
-    [jobId],
+    [jobId, editingCue],
   );
 
   // Ctrl+Z undoes transcript edits (but not while typing in a box).
@@ -133,7 +168,8 @@ export default function Review({ jobId }) {
     el.currentTime = Math.max(0, cue.start - 0.15);
     stopAt.current = cue.end + 0.15;
     setPlaying(cue.id);
-    el.play();
+    el.playbackRate = speed;
+    el.play().catch(() => { setPlaying(null); setActionError('Audio could not play. Check that the extracted audio is still available.'); });
   };
 
   const onTime = () => {
@@ -147,7 +183,7 @@ export default function Review({ jobId }) {
   const updateCue = (cue, patch, message) =>
     act(async () => {
       const r = await api.patch(`/api/jobs/${job.id}/cues/${encodeURIComponent(cue.id)}`, patch);
-      setJob((j) => ({ ...j, cues: j.cues.map((c) => (c.id === cue.id ? r.cue : c)) }));
+      setJob((j) => ({ ...j, cues: j.cues.map((c) => (c.id === cue.id ? r.cue : c)), suggestions: r.suggestions }));
       withUndo(r);
       say(message);
     });
@@ -155,7 +191,7 @@ export default function Review({ jobId }) {
   const deleteCue = (cue) =>
     act(async () => {
       const r = await api.del(`/api/jobs/${job.id}/cues/${encodeURIComponent(cue.id)}`);
-      setJob((j) => ({ ...j, cues: j.cues.filter((c) => c.id !== cue.id) }));
+      setJob((j) => ({ ...j, cues: j.cues.filter((c) => c.id !== cue.id), suggestions: r.suggestions }));
       withUndo(r);
       say('Deleted line');
     });
@@ -186,8 +222,8 @@ export default function Review({ jobId }) {
 
   const exportTo = (dir) =>
     act(async () => {
-      const { written } = await api.post(`/api/jobs/${job.id}/export`, { labels, dir });
-      setNotice({ text: `Saved ${plural(written.length, 'file')}`, path: written[0] });
+      const plan = await api.post(`/api/jobs/${job.id}/export/preview`, { dir });
+      setExportPlan({ ...plan, dir });
     });
 
   const saveToFolder = async () => {
@@ -197,7 +233,7 @@ export default function Review({ jobId }) {
 
   const srtUrl = (f) => `/api/jobs/${job.id}/srt?file=${encodeURIComponent(f.key)}${f.merged && !labels ? '&labels=0' : ''}`;
   const canSaveNext = files.some((f) => f.canSaveNextToVideo);
-  const checking = job.status === 'done' && (running(job.glossary) || running(job.proofread) || running(job.compare));
+  const checking = ['done','partial'].includes(job.status) && (running(job.glossary) || running(job.proofread) || running(job.compare));
 
   return (
     <div className="review">
@@ -238,10 +274,12 @@ export default function Review({ jobId }) {
       </header>
 
       {actionError && <div className="error">{actionError}</div>}
+      {loadError && <div className="error">Updates paused: {loadError} <button onClick={refresh}>Reconnect</button></div>}
+      {job.error && <div className="banner">{job.error} Completed tracks remain available for review and export.</div>}
 
       {checking && (
         <div className="strip">
-          <span className="spinner" /> Checking for mistakes. Suggestions appear below as they come in, usually within a minute.
+          <span className="spinner" /> Checking for mistakes. Suggestions appear when each check finishes. You can keep reviewing.
         </div>
       )}
       {!checking && suggestionCount > 0 && show === 'all' && (
@@ -249,7 +287,7 @@ export default function Review({ jobId }) {
           <span className="grow">
             {plural(suggestionCount, 'possible mistake')} to review.
           </span>
-          <button className="soft small" onClick={() => setShow('issues')}>Review</button>
+          <button disabled={Boolean(editingCue)} className="soft small" onClick={() => setShow('issues')}>Review</button>
         </div>
       )}
 
@@ -259,26 +297,28 @@ export default function Review({ jobId }) {
             <>
               <div className="toolbar">
                 <div className="segmented">
-                  <button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>
+                  <button disabled={Boolean(editingCue)} className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>
                     All <span className="count">{job.cues.length}</span>
                   </button>
-                  <button className={show === 'issues' ? 'on' : ''} onClick={() => setShow('issues')}>
+                  <button disabled={Boolean(editingCue)} className={show === 'issues' ? 'on' : ''} onClick={() => setShow('issues')}>
                     Needs a look <span className="count">{issueCount}</span>
                   </button>
                 </div>
                 {job.tracks.length > 1 && (
-                  <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)}>
+                  <select disabled={Boolean(editingCue)} aria-label="Filter by track" value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)}>
                     <option value="all">All tracks</option>
                     {job.tracks.map((t, pos) => (
                       <option key={pos} value={pos}>{trackName(pos)}</option>
                     ))}
                   </select>
                 )}
-                <input className="grow search" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
-                <button className="ghost" disabled={!job.undoCount} onClick={undo} title={job.undoLabel ? `Undo: ${job.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}>
+                <input disabled={Boolean(editingCue)} aria-label="Search transcript" className="grow search" placeholder="Search transcript" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <button className="ghost" disabled={Boolean(editingCue) || pending || !job.undoCount} onClick={undo} title={job.undoLabel ? `Undo: ${job.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}>
                   <Icon name="undo" /> Undo
                 </button>
               </div>
+
+              <div className="review-controls row wrap"><button className="small" onClick={() => jumpIssue(-1)} disabled={!cues.some(hasIssue)}>Previous issue <kbd>K</kbd></button><button className="small" onClick={() => jumpIssue(1)} disabled={!cues.some(hasIssue)}>Next issue <kbd>J</kbd></button><span className="grow muted small">Space to play the focused timecode</span><select aria-label="Playback speed" value={speed} onChange={e => { const value = Number(e.target.value); setSpeed(value); localStorage.setItem('playback-speed',value); if (audio.current) audio.current.playbackRate = value; }}>{[.75,1,1.25,1.5,2].map(v => <option key={v} value={v}>{v}× speed</option>)}</select></div>
 
               <div className="list-hint">
                 Click a timecode to play the line, click text to edit it.
@@ -286,7 +326,7 @@ export default function Review({ jobId }) {
                 {unlikelyCount > 0 && (
                   <>
                     {' '}
-                    <button className="link-btn" onClick={() => setShowUnlikely(!showUnlikely)}>
+                    <button disabled={Boolean(editingCue)} className="link-btn" onClick={() => setShowUnlikely(!showUnlikely)}>
                       {showUnlikely ? 'Hide' : 'Show'} {plural(unlikelyCount, 'unlikely suggestion')}
                     </button>
                   </>
@@ -296,10 +336,14 @@ export default function Review({ jobId }) {
               <audio ref={audio} onTimeUpdate={onTime} onPause={() => setPlaying(null)} />
 
               <ul className="cues">
-                {cues.map((c) => (
+                {cues.slice(page * 100, (page + 1) * 100).map((c) => (
                   <CueRow
                     key={c.id}
                     cue={c}
+                    pending={pending || Boolean(editingCue && editingCue !== c.id)}
+                    onEditing={setEditingCue}
+                    selected={selected === c.id}
+                    onSelect={() => setSelected(c.id)}
                     label={job.tracks.length > 1 ? trackName(c.track) : null}
                     color={trackColor(c.track)}
                     lowConfidence={lowConfidence(c)}
@@ -316,6 +360,7 @@ export default function Review({ jobId }) {
                   />
                 ))}
               </ul>
+              {cues.length > 100 && <div className="row pagination"><button disabled={Boolean(editingCue) || page === 0} onClick={() => setPage(p => p - 1)}>Previous page</button><span className="grow muted">Lines {page * 100 + 1}–{Math.min((page+1)*100,cues.length)} of {cues.length}</span><button disabled={Boolean(editingCue) || (page+1)*100 >= cues.length} onClick={() => setPage(p => p + 1)}>Next page</button></div>}
               {!cues.length && <p className="empty">{show === 'issues' ? 'Nothing left to look at.' : 'No lines match.'}</p>}
             </>
           ) : (
@@ -331,11 +376,11 @@ export default function Review({ jobId }) {
                 {desktop && (
                   <div className="stack-tight">
                     {canSaveNext && (
-                      <button className="primary" onClick={() => exportTo()} title="Writes the .srt files into each video's folder. Files with the same name are replaced.">
+                      <button className="primary" disabled={pending} onClick={() => exportTo()} title="Preview files and choose how to handle existing subtitles.">
                         Save next to the videos
                       </button>
                     )}
-                    <button onClick={saveToFolder}>
+                    <button disabled={pending} onClick={saveToFolder}>
                       <Icon name="folder" /> Save to folder…
                     </button>
                   </div>
@@ -452,7 +497,7 @@ export default function Review({ jobId }) {
                 </div>
               </div>
 
-              <button className="link-btn subtle" onClick={rebuild} title="Rebuild lines from the words using the subtitle settings">
+              <button disabled={Boolean(editingCue) || pending || running(job)} className="link-btn subtle" onClick={rebuild} title="Rebuild lines from the words using the subtitle settings">
                 Re-split lines…
               </button>
             </div>
@@ -460,11 +505,13 @@ export default function Review({ jobId }) {
         )}
       </div>
 
+      {exportPlan && <ExportDialog jobId={job.id} plan={exportPlan} labels={labels} onClose={() => setExportPlan(null)} onSaved={written => setNotice({ text: `Saved ${plural(written.length,'file')}`, path: written[0] })} />}
+
       {toast && (
         <div className="toast" role="status">
           <span>{toast}</span>
           {job.undoCount > 0 && (
-            <button className="link-btn" onClick={undo}>Undo</button>
+            <button disabled={Boolean(editingCue) || pending} className="link-btn" onClick={undo}>Undo</button>
           )}
         </div>
       )}
@@ -472,19 +519,20 @@ export default function Review({ jobId }) {
   );
 }
 
-function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions, threshold, playing, onPlay, onSave, onReviewed, onDelete, onAccept, onDismiss }) {
+function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions, threshold, playing, pending, selected, onSelect, onEditing, onPlay, onSave, onReviewed, onDelete, onAccept, onDismiss }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(cue.text);
 
-  const save = () => {
-    setEditing(false);
-    if (draft !== cue.text) onSave(draft);
+  useUnsaved(editing && draft !== cue.text, true);
+  useEffect(() => { if (editing) { onEditing(cue.id); return () => onEditing(null); } }, [editing, cue.id, onEditing]);
+  const save = async () => {
+    if (draft === cue.text || await onSave(draft)) setEditing(false);
   };
 
   const flagged = lowConfidence || suggestions.length > 0;
 
   return (
-    <li className={`cue ${flagged ? 'flagged' : ''} ${playing ? 'playing' : ''}`}>
+    <li id={`cue-${cue.id}`} onFocus={onSelect} className={`cue ${flagged ? 'flagged' : ''} ${playing ? 'playing' : ''} ${selected ? 'selected-cue' : ''}`}>
       <button className="tc" onClick={onPlay} title={playing ? 'Stop' : 'Play this line'}>
         <Icon name={playing ? 'pause' : 'play'} size={12} />
         {timecode(cue.start)}
@@ -496,13 +544,14 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
           </div>
         )}
         {editing ? (
-          <textarea
+          <div><textarea
             className="cue-edit"
             autoFocus
             rows={Math.max(2, draft.split('\n').length)}
             value={draft}
+            disabled={pending}
+            aria-label={`Edit subtitle at ${timecode(cue.start)}`}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={save}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -513,9 +562,9 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
                 setEditing(false);
               }
             }}
-          />
+          /><div className="row"><button className="primary small" disabled={pending} onClick={save}>{pending ? 'Saving…' : 'Save line'}</button><button className="small" disabled={pending} onClick={() => { setDraft(cue.text); setEditing(false); }}>Cancel</button><span className="hint">Enter saves · Shift+Enter adds a line</span></div></div>
         ) : (
-          <div
+          <button type="button" disabled={pending}
             className="cue-text"
             title="Click to edit"
             onClick={() => {
@@ -525,19 +574,19 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
           >
             <CueText cue={cue} threshold={threshold} highlights={suggestions.map((s) => s.from)} />
             {cue.edited && <span className="edited">edited</span>}
-          </div>
+          </button>
         )}
         {suggestions.map((s) => (
-          <Suggestion key={s.id} s={s} allSuggestions={allSuggestions} onAccept={onAccept} onDismiss={onDismiss} />
+          <Suggestion key={s.id} s={s} pending={pending || editing} allSuggestions={allSuggestions} onAccept={onAccept} onDismiss={onDismiss} />
         ))}
       </div>
       <div className="cue-actions">
         {lowConfidence && !suggestions.length && (
-          <button className="icon-btn" title="Looks right, clear the flag" onClick={onReviewed}>
+          <button className="icon-btn" title="Looks right, clear the flag" disabled={pending || editing} onClick={onReviewed}>
             <Icon name="check" />
           </button>
         )}
-        <button className="icon-btn" title="Delete line" onClick={onDelete}>
+        <button className="icon-btn" title="Delete line" disabled={pending || editing} onClick={onDelete}>
           <Icon name="trash" />
         </button>
       </div>
@@ -546,9 +595,10 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
 }
 
 // One suggested fix. The replacement is editable before you apply it.
-function Suggestion({ s, allSuggestions, onAccept, onDismiss }) {
+function Suggestion({ s, pending, allSuggestions, onAccept, onDismiss }) {
   const [to, setTo] = useState(s.to);
-  const same = allSuggestions.filter((x) => x.status === 'open' && x.from.toLowerCase() === s.from.toLowerCase()).length;
+  const norm = text => text.trim().toLowerCase().replace(/\s+/g,' ');
+  const same = new Set(allSuggestions.filter(x => x.status === 'open' && norm(x.from) === norm(s.from) && norm(x.to) === norm(s.to)).map(x => x.cueId)).size;
   const edited = to.trim() !== s.to;
   const source = s.source === 'ai' ? 'AI' : s.source === 'glossary' ? 'Glossary' : s.sourceLabel;
   const conf = s.verified;
@@ -580,13 +630,13 @@ function Suggestion({ s, allSuggestions, onAccept, onDismiss }) {
       </span>
       <span className="grow" />
       <div className="sug-actions">
-        <button className="soft small" disabled={!to.trim()} onClick={() => onAccept(s, false, to.trim())}>Fix</button>
+        <button className="soft small" disabled={pending || !to.trim()} onClick={() => onAccept(s, false, to.trim())}>Fix</button>
         {same > 1 && (
-          <button className="small" disabled={!to.trim()} onClick={() => onAccept(s, true, to.trim())}>
+          <button className="small" disabled={pending || !to.trim()} onClick={() => onAccept(s, true, to.trim())}>
             Fix all {same}
           </button>
         )}
-        <button className="ghost small" onClick={() => onDismiss(s)}>Ignore</button>
+        <button className="ghost small" disabled={pending} onClick={() => onDismiss(s)}>Ignore</button>
       </div>
     </div>
   );

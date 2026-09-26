@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { Component, createContext, useContext, useEffect, useState } from 'react';
 import { api, uploadFile } from './api.js';
 import Home from './Home.jsx';
 import Project from './Project.jsx';
@@ -33,6 +33,8 @@ export default function App() {
   const [uploads, setUploads] = useState([]); // { id, name, progress, error }
   const [dataVersion, setDataVersion] = useState(0);
   const [update, setUpdate] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [activity, setActivity] = useState(null);
 
   // Notice when a background update has finished downloading.
   useEffect(() => {
@@ -44,9 +46,19 @@ export default function App() {
   }, []);
 
   const loadSettings = () => api.get('/api/settings').then(setSettings);
+  const initialize = async () => {
+    setLoadError(null);
+    try {
+      const [p, s] = await Promise.all([api.get('/api/providers'), api.get('/api/settings')]);
+      setProviders(p); setSettings(s);
+    } catch (err) { setLoadError(err.message); }
+  };
   useEffect(() => {
-    api.get('/api/providers').then(setProviders);
-    loadSettings();
+    initialize();
+    const poll = () => api.get('/api/activity').then(setActivity).catch(() => {});
+    poll();
+    const timer = setInterval(poll, 2500);
+    return () => clearInterval(timer);
   }, []);
 
   const bumpData = () => setDataVersion((v) => v + 1);
@@ -95,7 +107,8 @@ export default function App() {
 
   const section = route[0] || 'home';
   const ctx = { providers, settings, reloadSettings: loadSettings, addFiles, addPaths, dataVersion, bumpData };
-  const noKeys = settings && !Object.entries(settings.keys).some(([id, k]) => k && id !== 'github' && id !== 'typesafe');
+  const noKeys = settings && !providers.transcribers.some(p => settings.keys[p.id]);
+  const activeCount = activity ? activity.jobs + activity.imports + activity.checks : 0;
 
   return (
     <AppContext.Provider value={ctx}>
@@ -104,6 +117,7 @@ export default function App() {
           <a className="brand" href="#/">
             <Logo /> Grok Transcriber
           </a>
+          <span className="app-activity" role="status">{activeCount ? <><span className="spinner" /> {activeCount} task{activeCount === 1 ? '' : 's'} in progress</> : 'Your transcription workspace'}</span>
           <nav>
             <a className={section === 'home' || section === 'projects' || section === 'jobs' ? 'active' : ''} href="#/">
               Projects
@@ -117,7 +131,7 @@ export default function App() {
         {update?.status === 'ready' && (
           <div className="update-bar">
             <span className="grow">{updateMessage(update)}</span>
-            <button className="primary small-btn" onClick={() => api.post('/api/update/install')}>Restart to update</button>
+            <button className="primary small-btn" onClick={() => api.post('/api/update/install').catch(err => setLoadError(err.message))}>Restart to update</button>
           </div>
         )}
 
@@ -137,15 +151,16 @@ export default function App() {
         )}
 
         <main>
+          {loadError && <div className="error" role="alert">{loadError} <button onClick={initialize}>Try again</button></div>}
           {noKeys && section !== 'settings' && (
             <div className="banner">
               No API keys yet. <a href="#/settings">Add one in Settings</a> to start transcribing.
             </div>
           )}
           {!settings ? (
-            <p className="muted">Loading…</p>
+            <p className="muted">{loadError ? 'The workspace could not be loaded.' : 'Opening your workspace…'}</p>
           ) : (
-            <>
+            <WorkspaceBoundary>
               {/* Home and Settings stay mounted so switching tabs never loses what you were doing. */}
               <div hidden={section !== 'home'}>
                 <Home active={section === 'home'} />
@@ -155,12 +170,21 @@ export default function App() {
               </div>
               {section === 'projects' && route[1] && <Project key={route[1]} projectId={route[1]} />}
               {section === 'jobs' && route[1] && <Review key={route[1]} jobId={route[1]} />}
-            </>
+            </WorkspaceBoundary>
           )}
         </main>
 
-        <footer>Grok Transcriber v{__APP_VERSION__}</footer>
+        <footer>Grok Transcriber v{__APP_VERSION__} · {desktop ? 'Windows desktop' : 'Browser'} · Projects saved on this computer</footer>
       </div>
     </AppContext.Provider>
   );
+}
+
+class WorkspaceBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error: error.message }; }
+  render() {
+    if (this.state.error) return <div className="card stack"><h2>This view could not open</h2><p>{this.state.error}</p><button onClick={() => location.reload()}>Reload workspace</button></div>;
+    return this.props.children;
+  }
 }

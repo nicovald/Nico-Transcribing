@@ -8,10 +8,19 @@ import { extractTrack, prepareAudio, probe } from './ffmpeg.js';
 import { providers } from './providers/index.js';
 import { buildCues } from './srt.js';
 import * as store from './store.js';
+import { readTranscript, updateTranscript } from './transcript.js';
+import { badRequest, validateOptions } from './validation.js';
+import { withTrackSlot } from './work.js';
 
 // Live progress lives in memory so we are not rewriting JSON on every ffmpeg tick.
 const progress = new Map(); // key -> 0..1
 const controllers = new Map(); // jobId -> AbortController
+const tasks = new Map();
+const imports = new Map();
+const deleting = new Set();
+export const markDeleting = id => deleting.add(id);
+export const isDeleting = id => deleting.has(id);
+export const activeWork = () => ({ jobs: tasks.size, imports: imports.size });
 const listeners = new Set(); // (event, job) => void, e.g. run proofread when a job finishes
 
 export const getProgress = (key) => progress.get(key) ?? null;
@@ -23,6 +32,7 @@ export const onJobEvent = (fn) => listeners.add(fn);
 let importChain = Promise.resolve();
 
 export function createMedia({ projectId, name, sourcePath, copied }) {
+  if (deleting.has(projectId)) throw new Error('This project is being removed.');
   const media = {
     id: crypto.randomUUID(),
     projectId,
@@ -38,19 +48,34 @@ export function createMedia({ projectId, name, sourcePath, copied }) {
     createdAt: new Date().toISOString(),
   };
   store.saveMedia(media);
-  importChain = importChain.then(() => importMedia(media.id));
+  queueImport(media.id);
   return media;
 }
 
-export const trackAudioPath = (mediaId, index) => path.join(store.mediaDir(mediaId), `track-${index}.flac`);
+export const trackAudioPath = (mediaId, index) => {
+  if (!Number.isInteger(index) || index < 0) throw badRequest('Invalid audio track.');
+  return path.join(store.mediaDir(mediaId), `track-${index}.flac`);
+};
+function queueImport(id) {
+  const controller = new AbortController();
+  const task = importChain.catch(() => {}).then(() => importMedia(id, controller.signal)).catch(err => console.error('Import failed:', err.message)).finally(() => imports.delete(id));
+  imports.set(id, { controller, task });
+  importChain = task;
+}
+export async function stopImport(id) {
+  const work = imports.get(id);
+  work?.controller.abort(new Error('Import cancelled'));
+  await work?.task;
+}
 
-async function importMedia(mediaId) {
+async function importMedia(mediaId, signal) {
   const media = store.getMedia(mediaId);
   if (!media) return; // deleted while queued
+  if (signal.aborted) return;
   media.status = 'importing';
   store.saveMedia(media);
   try {
-    const info = await probe(media.sourcePath);
+    const info = await probe(media.sourcePath, { signal });
     if (!info.tracks.length) throw new Error('No audio tracks found in this file.');
     media.duration = info.duration;
     media.tracks = info.tracks.map((t) => ({ ...t, extracted: false }));
@@ -62,6 +87,8 @@ async function importMedia(mediaId) {
       try {
         await extractTrack(media.sourcePath, track.index, trackAudioPath(media.id, track.index), {
           duration: track.duration || info.duration,
+          startOffset: track.startOffset,
+          signal,
           onProgress: (p) => progress.set(key, p),
         });
       } finally {
@@ -69,7 +96,9 @@ async function importMedia(mediaId) {
       }
       if (!store.getMedia(media.id)) return; // deleted mid-import
       track.extracted = true;
-      store.saveMedia(media);
+      track.duration = (await probe(trackAudioPath(media.id, track.index), { signal })).duration;
+      track.timelineVersion = 1;
+      store.saveMedia({ ...store.getMedia(media.id), ...media, displayName: store.getMedia(media.id).displayName });
     }
     media.status = 'ready';
   } catch (err) {
@@ -77,21 +106,19 @@ async function importMedia(mediaId) {
     media.error = err.message;
   } finally {
     if (media.copied) fs.rmSync(media.sourcePath, { force: true });
-    if (store.getMedia(media.id)) store.saveMedia(media);
+    if (store.getMedia(media.id)) store.saveMedia({ ...media, displayName: store.getMedia(media.id).displayName });
   }
 }
 
 // ---------------------------------------------------------------- jobs
 
 const wordsPath = (jobId, pos) => path.join(store.jobDir(jobId), `words-${pos}.json`);
-const cuesPath = (jobId) => path.join(store.jobDir(jobId), 'cues.json');
-const suggestionsPath = (jobId) => path.join(store.jobDir(jobId), 'suggestions.json');
 
 export const readWords = (jobId, pos) => store.readJson(wordsPath(jobId, pos), null);
-export const readCues = (jobId) => store.readJson(cuesPath(jobId), []);
-export const writeCues = (jobId, cues) => fs.writeFileSync(cuesPath(jobId), JSON.stringify(cues));
-export const readSuggestions = (jobId) => store.readJson(suggestionsPath(jobId), []);
-export const writeSuggestions = (jobId, s) => fs.writeFileSync(suggestionsPath(jobId), JSON.stringify(s));
+export const readCues = id => readTranscript(id).cues;
+export const writeCues = (id, cues) => updateTranscript(id, state => { state.cues = cues; });
+export const readSuggestions = id => readTranscript(id).suggestions;
+export const writeSuggestions = (id, suggestions) => updateTranscript(id, state => { state.suggestions = suggestions; });
 
 const splitTerms = (text) => String(text || '').split(/[\n,]/).map((t) => t.trim()).filter(Boolean);
 const splitLines = (text) => String(text || '').split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
@@ -115,14 +142,22 @@ export function resolveGlossary(options, settings) {
 }
 
 // tracks: [{ mediaId, index, label }]
-export function createJob({ projectId, tracks, provider, options, compareFor = null }) {
+export function createJob({ projectId, tracks, provider, options = {}, compareFor = null }) {
   const project = store.getProject(projectId);
   if (!project) throw new Error('Project not found.');
-  if (!providers[provider]) throw new Error(`Unknown provider: ${provider}`);
-  if (!tracks?.length) throw new Error('Pick at least one audio track.');
+  if (deleting.has(projectId)) throw new Error('This project is being removed.');
+  if (!Object.hasOwn(providers, provider)) throw new Error(`Unknown provider: ${provider}`);
+  if (!Array.isArray(tracks) || !tracks.length) throw badRequest('Pick at least one audio track.');
+  options = { ...store.DEFAULT_SETTINGS.lastOptions, ...validateOptions(options) };
+  const selected = new Set();
   for (const t of tracks) {
     const m = store.getMedia(t.mediaId);
     if (!m || m.status !== 'ready') throw new Error(`"${m?.displayName ?? 'A video'}" is not ready yet.`);
+    if (m.projectId !== projectId || !Number.isInteger(t.index) || !m.tracks.some(track => track.index === t.index && track.extracted)) throw badRequest('Choose an available track from this project.');
+    if (t.label != null && typeof t.label !== 'string') throw badRequest('Track names must be text.');
+    const tk = `${t.mediaId}:${t.index}`;
+    if (selected.has(tk)) throw badRequest('The same track was selected twice.');
+    selected.add(tk);
   }
 
   const job = {
@@ -154,8 +189,9 @@ export function createJob({ projectId, tracks, provider, options, compareFor = n
   return job;
 }
 
-export function cancelJob(jobId) {
+export async function cancelJob(jobId) {
   controllers.get(jobId)?.abort(new Error('Cancelled'));
+  await tasks.get(jobId);
 }
 
 // Transcribe one track, chunking the audio if the provider has a size limit.
@@ -179,15 +215,26 @@ async function transcribeTrack(job, pos, provider, key, keyterms, signal) {
       signal.throwIfAborted();
       progress.set(progKey, c / chunks);
       const offset = chunks > 1 ? c * chunkLen : 0;
+      const cache = path.join(store.jobDir(job.id), `chunk-${pos}-${c}.json`);
+      const signature = JSON.stringify({ model: job.model, options, offset, chunkLen });
+      const cached = store.readJson(cache, null);
+      let result = cached?.signature === signature ? cached.result : null;
       const file = path.join(tmpDir, `chunk-${c}.${provider.codec || 'flac'}`);
+      if (!result) {
       await prepareAudio(src, file, {
         cleanup: job.options.voiceCleanup,
         start: chunks > 1 ? offset : undefined,
         length: chunks > 1 ? chunkLen : undefined,
         codec: provider.codec || 'flac',
+        signal,
       });
       const model = job.model === 'default' ? '' : job.model;
-      const result = await provider.transcribe({ file, key, model, options, signal });
+      signal.throwIfAborted();
+      result = await provider.transcribe({ file, key, model, options, signal });
+      signal.throwIfAborted();
+      if (!Array.isArray(result?.words) || result.words.some(w => typeof w.text !== 'string' || !Number.isFinite(w.start) || !Number.isFinite(w.end) || w.start < 0 || w.end < w.start)) throw new Error('The service returned invalid word timings. Please retry or choose another service.');
+      store.writeJson(cache, { signature, result });
+      }
       language ??= result.language;
       for (const w of result.words) words.push({ ...w, start: w.start + offset, end: w.end + offset });
       fs.rmSync(file, { force: true });
@@ -199,26 +246,40 @@ async function transcribeTrack(job, pos, provider, key, keyterms, signal) {
   }
 }
 
-export async function runJob(jobId, { onlyFailed = false } = {}) {
+export function runJob(jobId, options = {}) {
+  if (tasks.has(jobId)) return tasks.get(jobId);
+  if (deleting.has(jobId)) return Promise.resolve();
+  const controller = new AbortController();
+  controllers.set(jobId, controller);
+  const task = Promise.resolve().then(() => executeJob(jobId, options, controller)).catch(err => {
+    const job = store.getJob(jobId);
+    if (job && !deleting.has(jobId)) store.saveJob({ ...job, status: 'error', error: err.message });
+  }).finally(() => { tasks.delete(jobId); controllers.delete(jobId); });
+  tasks.set(jobId, task);
+  return task;
+}
+async function executeJob(jobId, { onlyFailed = false }, controller) {
   const job = store.getJob(jobId);
   if (!job) return;
   const provider = providers[job.provider];
   const settings = store.getSettings();
   const key = settings.keys[job.provider];
   const keyterms = resolveKeyterms(job.options, settings);
-  const controller = new AbortController();
-  controllers.set(jobId, controller);
+  const persist = () => {
+    const current = store.getJob(jobId);
+    if (current && !deleting.has(jobId)) store.saveJob({ ...current, status: job.status, error: job.error, tracks: job.tracks, finishedAt: job.finishedAt });
+  };
 
   job.status = 'running';
   job.error = null;
   if (!key) {
     job.status = 'error';
     job.error = `No API key saved for ${provider.name}. Add one in Settings.`;
-    store.saveJob(job);
-    controllers.delete(jobId);
+    for (const track of job.tracks) if (track.status !== 'done') Object.assign(track, { status: 'error', error: job.error });
+    persist();
     return;
   }
-  store.saveJob(job);
+  persist();
 
   const todo = job.tracks.map((t, pos) => pos).filter((pos) => !onlyFailed || job.tracks[pos].status !== 'done');
 
@@ -230,10 +291,12 @@ export async function runJob(jobId, { onlyFailed = false } = {}) {
       const track = job.tracks[pos];
       track.status = 'running';
       track.error = null;
-      store.saveJob(job);
+      persist();
       try {
-        const { words, language } = await transcribeTrack(job, pos, provider, key, keyterms, controller.signal);
-        fs.writeFileSync(wordsPath(job.id, pos), JSON.stringify(words));
+        const { words, language } = await withTrackSlot(controller.signal, () => transcribeTrack(job, pos, provider, key, keyterms, controller.signal));
+        controller.signal.throwIfAborted();
+        if (deleting.has(jobId)) return;
+        store.writeJson(wordsPath(job.id, pos), words);
         track.status = 'done';
         track.language = language;
         track.wordCount = words.length;
@@ -244,18 +307,19 @@ export async function runJob(jobId, { onlyFailed = false } = {}) {
         track.status = 'error';
         track.error = controller.signal.aborted ? 'Cancelled' : err.message;
       }
-      store.saveJob(job);
+      persist();
     }
   };
-  await Promise.all(Array.from({ length: Math.min(4, todo.length) }, worker));
+  const workers = await Promise.allSettled(Array.from({ length: Math.min(4, todo.length) }, worker));
+  const failedWorker = workers.find(result => result.status === 'rejected');
+  if (failedWorker) throw failedWorker.reason;
 
-  controllers.delete(jobId);
   const failed = job.tracks.filter((t) => t.status === 'error');
-  job.status = controller.signal.aborted ? 'cancelled' : failed.length === job.tracks.length ? 'error' : 'done';
+  job.status = controller.signal.aborted ? 'cancelled' : failed.length === job.tracks.length ? 'error' : failed.length ? 'partial' : 'done';
   job.error = failed.length ? `${failed.length} track(s) failed` : null;
   job.finishedAt = new Date().toISOString();
-  store.saveJob(job);
-  for (const fn of listeners) fn('finished', job);
+  persist();
+  if (!deleting.has(jobId)) for (const fn of listeners) await fn('finished', store.getJob(jobId));
 }
 
 // Rebuild cues from stored words using the current cue settings (drops text edits).
@@ -267,8 +331,7 @@ export function rebuildCues(jobId) {
     const words = readWords(jobId, pos);
     if (words) cues.push(...buildCues(words, settings.cue, pos));
   });
-  writeCues(jobId, cues);
-  writeSuggestions(jobId, []);
+  updateTranscript(jobId, state => { state.cues = cues; state.suggestions = []; state.history = []; });
   return cues;
 }
 
@@ -298,7 +361,7 @@ export function recoverInterrupted() {
         store.saveMedia(media);
       } else {
         // We still have the original file, so just redo the import.
-        importChain = importChain.then(() => importMedia(media.id));
+        queueImport(media.id);
       }
     }
   }

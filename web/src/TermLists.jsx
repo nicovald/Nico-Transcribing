@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
 import { Icon } from './shared.jsx';
+import useUnsaved from './useUnsaved.js';
 
 const count = (text, sep) => String(text || '').split(sep).filter((t) => t.trim()).length;
 const priorityCount = (l) => count(l.terms, /[\n,]/);
@@ -12,6 +13,7 @@ export default function TermLists() {
   const { settings, reloadSettings } = useApp();
   const [lists, setLists] = useState(settings.termLists);
   const [status, setStatus] = useState(null); // 'saving' | 'saved' | error text
+  useUnsaved(JSON.stringify(lists) !== JSON.stringify(settings.termLists));
   const timer = useRef();
   const first = useRef(true);
 
