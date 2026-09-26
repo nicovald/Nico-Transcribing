@@ -254,3 +254,4 @@ textarea.drop-over { outline: 2px dashed var(--accent); }
 .preset-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--panel-2); border-radius: 8px; }
 .preset-card input, .preset-card select, .preset-card textarea { background: var(--panel); }
 .layout-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.preset-empty { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 14px; background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; font-size: 14px; }

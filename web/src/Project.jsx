@@ -6,6 +6,7 @@ import usePoll from './usePoll.js';
 
 // Unsent setup choices per project, kept while you visit other pages.
 const drafts = new Map();
+const NEW_PRESET = '__new__';
 
 const listSize = (l) =>
   String(l.glossary || '').split('\n').filter((t) => t.trim()).length + String(l.terms || '').split(/[\n,]/).filter((t) => t.trim()).length;
@@ -28,7 +29,10 @@ export default function Project({ projectId }) {
     [projectId, dataVersion],
   );
   const [error, setError] = useState(null);
+  const [presetRequest, setPresetRequest] = useState(0);
   const fileInput = useRef();
+  // Opens the "name your preset" box in the Transcribe section and scrolls to it.
+  const requestPreset = () => setPresetRequest((n) => n + 1);
 
   if (loadError && !project) return <div className="error">{loadError}</div>;
   if (!project) return <p className="muted">Loading…</p>;
@@ -66,16 +70,32 @@ export default function Project({ projectId }) {
         <h1>
           <EditableText value={project.name} onSave={(name) => patchProject({ name })} />
         </h1>
-        <label>
-          Preset
-          <select value={project.presetId || ''} onChange={(e) => patchProject({ presetId: e.target.value || null })}>
-            <option value="">No preset</option>
-            {settings.presets.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <span className="hint">Fills in the description, term lists, language and track names below. Manage presets in Settings.</span>
-        </label>
+        {settings.presets.length ? (
+          <label>
+            Preset
+            <select
+              value={project.presetId || ''}
+              onChange={(e) => (e.target.value === NEW_PRESET ? requestPreset() : patchProject({ presetId: e.target.value || null }))}
+            >
+              <option value="">No preset</option>
+              {settings.presets.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+              <option value={NEW_PRESET}>＋ Save this project's setup as a new preset…</option>
+            </select>
+            <span className="hint">A preset fills in the description, term lists, language and track names below. Edit presets in Settings.</span>
+          </label>
+        ) : (
+          <div className="preset-empty">
+            <div className="grow">
+              <strong>No presets yet.</strong>{' '}
+              <span className="muted">
+                A preset remembers this whole setup (term lists, description, language, track names) so the next video in the series is one click. Set up the Transcribe section below, then save it.
+              </span>
+            </div>
+            <button disabled={!project.media.some((m) => m.status === 'ready')} onClick={requestPreset}>Save setup as preset…</button>
+          </div>
+        )}
         <label>
           What's in this video?
           <ContextInput value={project.context} onSave={(context) => patchProject({ context })} />
@@ -125,7 +145,14 @@ export default function Project({ projectId }) {
       </section>
 
       {project.media.some((m) => m.status === 'ready') && (
-        <Setup key={project.presetId || 'none'} project={project} providers={providers.transcribers} settings={settings} onPresetSaved={(presetId) => patchProject({ presetId })} />
+        <Setup
+          key={project.presetId || 'none'}
+          project={project}
+          providers={providers.transcribers}
+          settings={settings}
+          presetRequest={presetRequest}
+          onPresetSaved={(presetId) => patchProject({ presetId })}
+        />
       )}
 
       {project.jobs.length > 0 && (
@@ -221,7 +248,7 @@ function ContextInput({ value, onSave }) {
   );
 }
 
-function Setup({ project, providers, settings, onPresetSaved }) {
+function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
   const { reloadSettings } = useApp();
   const preset = settings.presets.find((p) => p.id === project.presetId) ?? null;
   const draftKey = `${project.id}:${project.presetId || ''}`;
@@ -243,6 +270,12 @@ function Setup({ project, providers, settings, onPresetSaved }) {
       },
   );
   const [saving, setSaving] = useState(null); // null | { name }
+  const saveBox = useRef();
+  useEffect(() => {
+    if (!presetRequest) return;
+    setSaving((s) => s ?? { name: '' });
+    requestAnimationFrame(() => saveBox.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  }, [presetRequest]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -358,7 +391,7 @@ function Setup({ project, providers, settings, onPresetSaved }) {
 
       <div>
         <div className="label-like">
-          Key terms <span className="hint-inline">sent to the transcriber so it spells game words and names right</span>
+          Term lists <span className="hint-inline">click to tick the lists this video uses (✓ = on)</span>
         </div>
         <div className="chips">
           {settings.termLists.map((l) => (
@@ -412,6 +445,7 @@ function Setup({ project, providers, settings, onPresetSaved }) {
         <span className="grow" />
         {saving ? (
           <form
+            ref={saveBox}
             className="row"
             onSubmit={(e) => {
               e.preventDefault();
