@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
-import { LANGUAGES } from './shared.jsx';
+import { Icon, LANGUAGES } from './shared.jsx';
 
 const blank = (settings) => ({
   id: crypto.randomUUID(),
@@ -64,7 +64,7 @@ export default function Presets() {
       <div className="row wrap">
         <h2 className="grow">Presets</h2>
         <span className="muted small">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : ''}</span>
-        <button type="button" onClick={() => setPresets((ps) => [...ps, blank(settings)])}>＋ New preset</button>
+        <button type="button" onClick={() => setPresets((ps) => [...ps, blank(settings)])}><Icon name="plus" /> New preset</button>
       </div>
       {status && status !== 'saving' && status !== 'saved' && <div className="error">{status}</div>}
       <p className="muted small">
@@ -153,11 +153,11 @@ function PresetCard({ preset: p, settings, providers, onChange, onDelete }) {
                 <div key={i} className="layout-row">
                   <input type="checkbox" checked={t.on} onChange={(e) => setTrack(i, { on: e.target.checked })} title="Transcribe this track" />
                   <input value={t.name} onChange={(e) => setTrack(i, { name: e.target.value })} placeholder={`Track ${i + 1}`} />
-                  <button type="button" className="ghost small-btn" onClick={() => onChange({ tracks: p.tracks.filter((_, j) => j !== i) })}>✕</button>
+                  <button type="button" className="icon-btn" title="Remove" onClick={() => onChange({ tracks: p.tracks.filter((_, j) => j !== i) })}><Icon name="x" /></button>
                 </div>
               ))}
               <button type="button" className="small-btn" style={{ alignSelf: 'flex-start' }} onClick={() => onChange({ tracks: [...(p.tracks || []), { name: `Track ${(p.tracks?.length || 0) + 1}`, on: true }] })}>
-                ＋ Add track
+                <Icon name="plus" /> Add track
               </button>
             </div>
           </div>

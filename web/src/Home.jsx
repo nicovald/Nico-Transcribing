@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
 import { navigate, useApp } from './App.jsx';
-import { desktop, DropTarget, EditableText, isMediaFile, StatusPill } from './shared.jsx';
+import { desktop, DropTarget, EditableText, Icon, isMediaFile, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 
 const busy = (p) => p.media.some((m) => m.status === 'importing' || m.status === 'queued') || p.jobs.some((j) => j.status === 'running');
@@ -60,7 +60,7 @@ export default function Home({ active }) {
       )}
       <DropTarget className="dropzone" onFiles={(files) => run(() => addFiles(files, null, preset))}>
         <div onClick={browse} className="dropzone-inner">
-          <div className="big">🎬</div>
+          <Icon name="film" size={28} />
           <strong>Drop videos here to start a project</strong>
           <span className="muted">Drop several at once for multicam. Every audio track is pulled out automatically.</span>
           <button className="primary" onClick={(e) => { e.stopPropagation(); browse(); }}>Choose videos…</button>
@@ -130,8 +130,8 @@ export default function Home({ active }) {
                   ) : latest ? (
                     <StatusPill status={latest.status} />
                   ) : null}
-                  <button className="ghost small-btn" title="Delete project" onClick={(e) => remove(e, p)}>
-                    ✕
+                  <button className="icon-btn" title="Delete project" onClick={(e) => remove(e, p)}>
+                    <Icon name="trash" />
                   </button>
                 </li>
               );

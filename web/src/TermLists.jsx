@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
+import { Icon } from './shared.jsx';
 
 const count = (text, sep) => String(text || '').split(sep).filter((t) => t.trim()).length;
 const priorityCount = (l) => count(l.terms, /[\n,]/);
@@ -63,8 +64,8 @@ export default function TermLists() {
       <div className="row wrap">
         <h2 className="grow">Term lists</h2>
         <span className="muted small">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : ''}</span>
-        <button type="button" onClick={addMinecraft} disabled={loadingMc}>{loadingMc ? 'Downloading…' : '＋ All vanilla Minecraft names'}</button>
-        <button type="button" onClick={() => add({})}>＋ New list</button>
+        <button type="button" onClick={addMinecraft} disabled={loadingMc}>{loadingMc ? 'Downloading…' : <><Icon name="download" /> Vanilla Minecraft list</>}</button>
+        <button type="button" onClick={() => add({})}><Icon name="plus" /> New list</button>
       </div>
       {status && status !== 'saving' && status !== 'saved' && <div className="error">{status}</div>}
       <p className="muted small">

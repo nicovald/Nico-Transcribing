@@ -87,7 +87,7 @@ export function EditableText({ value, onSave, className = '', placeholder = 'Unt
       }}
     >
       {value || placeholder}
-      <span className="pencil">✎</span>
+      <Icon name="edit" size={13} className="pencil" />
     </span>
   );
 }
@@ -124,5 +124,39 @@ export function DropTarget({ onFiles, children, className = '' }) {
     >
       {children}
     </div>
+  );
+}
+
+// Small line icons (16px, currentColor) instead of emoji.
+const ICONS = {
+  play: <path d="M5 3.5v9l7.5-4.5z" fill="currentColor" stroke="none" />,
+  pause: <path d="M5 3.5v9M11 3.5v9" strokeWidth="2.2" />,
+  x: <path d="M4 4l8 8M12 4l-8 8" />,
+  trash: <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />,
+  undo: <path d="M5.5 3.5L2.5 6.5l3 3M2.5 6.5h7a3.5 3.5 0 010 7H7" />,
+  download: <path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />,
+  plus: <path d="M8 3v10M3 8h10" />,
+  external: <path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5" />,
+  edit: <path d="M10.5 2.5l3 3L6 13H3v-3z" />,
+  check: <path d="M3 8.5l3.2 3L13 4.5" />,
+  film: <path d="M2.5 3.5h11v9h-11zM5.5 3.5v9M10.5 3.5v9M2.5 6.5h3M2.5 9.5h3M10.5 6.5h3M10.5 9.5h3" />,
+  folder: <path d="M2 4.5h4l1.5 1.5H14v6.5H2z" />,
+};
+
+export function Icon({ name, size = 16, className = '' }) {
+  return (
+    <svg className={`icon ${className}`} width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+export function Logo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="1" y="1" width="18" height="18" rx="5" fill="var(--accent)" />
+      <rect x="5" y="7" width="10" height="2" rx="1" fill="var(--bg)" />
+      <rect x="5" y="11" width="6.5" height="2" rx="1" fill="var(--bg)" />
+    </svg>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
-import { desktop, Progress } from './shared.jsx';
+import { desktop, Icon, Progress } from './shared.jsx';
 
 const TOKEN_URL =
   'https://github.com/settings/personal-access-tokens/new?name=Grok+Transcriber+updates&description=Lets+Grok+Transcriber+download+new+versions&expires_in=none';
@@ -69,7 +69,7 @@ export default function Updates() {
       <label>
         <span className="row">
           <strong className="grow">GitHub access token</strong>
-          <a href={TOKEN_URL} target="_blank" rel="noreferrer" className="small" onClick={openLink}>Create one ↗</a>
+          <a href={TOKEN_URL} target="_blank" rel="noreferrer" className="small" onClick={openLink}>Create one <Icon name="external" size={12} /></a>
         </span>
         <div className="row">
           <input

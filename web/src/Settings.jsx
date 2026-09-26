@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from './api.js';
 import { useApp } from './App.jsx';
-import { desktop } from './shared.jsx';
+import { desktop, Icon } from './shared.jsx';
 import TermLists from './TermLists.jsx';
 import Presets from './Presets.jsx';
 import Updates from './Updates.jsx';
@@ -60,7 +60,7 @@ export default function Settings() {
       <label>
         <span className="row">
           <strong className="grow">{name}</strong>
-          <a href={url} target="_blank" rel="noreferrer" className="small" onClick={(e) => openLink(e, url)}>Get a key ↗</a>
+          <a href={url} target="_blank" rel="noreferrer" className="small" onClick={(e) => openLink(e, url)}>Get a key <Icon name="external" size={12} /></a>
         </span>
         <input type="password" autoComplete="off" value={form.keys[id] || ''} onChange={text(`keys.${id}`)} onFocus={(e) => e.target.select()} placeholder="Paste API key" />
       </label>

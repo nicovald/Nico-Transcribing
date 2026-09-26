@@ -5,7 +5,7 @@ import Project from './Project.jsx';
 import Review from './Review.jsx';
 import Settings from './Settings.jsx';
 import { updateMessage } from './Updates.jsx';
-import { desktop, Progress } from './shared.jsx';
+import { desktop, Icon, Logo, Progress } from './shared.jsx';
 
 // Tiny hash router: #/, #/projects/<id>, #/jobs/<id>, #/settings
 function useRoute() {
@@ -102,7 +102,7 @@ export default function App() {
       <div className="app">
         <header className="topbar">
           <a className="brand" href="#/">
-            <span className="logo">💬</span> Grok Transcriber
+            <Logo /> Grok Transcriber
           </a>
           <nav>
             <a className={section === 'home' || section === 'projects' || section === 'jobs' ? 'active' : ''} href="#/">
@@ -125,9 +125,9 @@ export default function App() {
           <div className="uploads">
             {uploads.map((u) => (
               <div key={u.id} className="upload-row">
-                <span className="grow">{u.error ? `⚠ ${u.name}: ${u.error}` : `Copying ${u.name}…`}</span>
+                <span className="grow">{u.error ? <span className="error-text">{u.name}: {u.error}</span> : `Copying ${u.name}…`}</span>
                 {u.error ? (
-                  <button className="ghost small-btn" onClick={() => setUploads((x) => x.filter((y) => y.id !== u.id))}>✕</button>
+                  <button className="icon-btn" title="Dismiss" onClick={() => setUploads((x) => x.filter((y) => y.id !== u.id))}><Icon name="x" /></button>
                 ) : (
                   <Progress value={u.progress} />
                 )}

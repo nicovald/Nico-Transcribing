@@ -64,6 +64,8 @@ async function createWindow() {
       preload: path.join(here, 'preload.cjs'),
       contextIsolation: true,
       sandbox: true,
+      // Screenshot runs render offscreen so capture works even when the desktop is locked or covered.
+      offscreen: Boolean(process.env.SCREENSHOT),
     },
   });
 

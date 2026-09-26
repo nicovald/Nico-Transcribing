@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
 import { navigate, useApp } from './App.jsx';
-import { desktop, DropTarget, EditableText, isMediaFile, LANGUAGES, Progress, StatusPill } from './shared.jsx';
+import { desktop, DropTarget, EditableText, Icon, isMediaFile, LANGUAGES, Progress, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 
 // Unsent setup choices per project, kept while you visit other pages.
@@ -64,7 +64,9 @@ export default function Project({ projectId }) {
   return (
     <DropTarget className="stack" onFiles={(files) => act(() => addFiles(files, project.id))}>
       <div className="crumbs">
-        <a href="#/">Projects</a> ›
+        <a href="#/">Projects</a>
+        <span>/</span>
+        <span>{project.name}</span>
       </div>
       <section className="card">
         <h1>
@@ -81,7 +83,7 @@ export default function Project({ projectId }) {
               {settings.presets.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
-              <option value={NEW_PRESET}>＋ Save this project's setup as a new preset…</option>
+              <option value={NEW_PRESET}>Save this project's setup as a new preset…</option>
             </select>
             <span className="hint">A preset fills in the description, term lists, language and track names below. Edit presets in Settings.</span>
           </label>
@@ -108,7 +110,7 @@ export default function Project({ projectId }) {
       <section className="stack-tight">
         <div className="row">
           <h2 className="grow">Videos</h2>
-          <button onClick={addVideos}>＋ Add videos</button>
+          <button onClick={addVideos}><Icon name="plus" /> Add videos</button>
           <input
             ref={fileInput}
             type="file"
@@ -136,7 +138,7 @@ export default function Project({ projectId }) {
                 </div>
               </div>
               {m.status !== 'ready' && <StatusPill status={m.status} />}
-              <button className="ghost small-btn" title="Remove from project" onClick={() => removeMedia(m)}>✕</button>
+              <button className="icon-btn" title="Remove from project" onClick={() => removeMedia(m)}><Icon name="x" /></button>
             </div>
             {importing(m) && <Progress value={importPercent(m)} />}
             {m.status === 'error' && <div className="error">{m.error}</div>}
@@ -171,14 +173,14 @@ export default function Project({ projectId }) {
                 </div>
                 <StatusPill status={j.status} />
                 <button
-                  className="ghost small-btn"
+                  className="icon-btn"
                   title="Delete transcript"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (window.confirm('Delete this transcript?')) act(() => api.del(`/api/jobs/${j.id}`));
                   }}
                 >
-                  ✕
+                  <Icon name="trash" />
                 </button>
               </li>
             ))}
@@ -227,7 +229,7 @@ function TrackPreview({ src }) {
 
   return (
     <div className="preview">
-      <button className="small-btn" onClick={toggle}>{state.playing ? '❚❚ Pause' : '▶ Listen'}</button>
+      <button className="small-btn" onClick={toggle}><Icon name={state.playing ? 'pause' : 'play'} size={12} /> {state.playing ? 'Pause' : 'Listen'}</button>
       {state.playing && <button className="ghost small-btn" title="Skip ahead 60s" onClick={() => skip(60)}>+60s</button>}
       <span className="muted small">{formatTime(state.time)}</span>
     </div>
@@ -402,7 +404,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
             </button>
           ))}
           <a href="#/settings" className="small">
-            {settings.termLists.length ? 'Edit lists' : '＋ Make a term list (e.g. Minecraft)'}
+            {settings.termLists.length ? 'Edit lists' : 'Make a term list (e.g. Minecraft)'}
           </a>
         </div>
         <textarea

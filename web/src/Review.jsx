@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
-import { navigate, useApp } from './App.jsx';
-import { desktop, Progress, StatusPill } from './shared.jsx';
+import { useApp } from './App.jsx';
+import { desktop, Icon, Progress, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 
-const TRACK_COLORS = ['#5eb1ff', '#ff8f5e', '#7ee08a', '#d98cff', '#ffd05e', '#5ee0d2', '#ff6b9a', '#b8c0cc'];
+const TRACK_COLORS = ['#7aa2f7', '#e0a36b', '#8cc98f', '#c49bea', '#d9c36a', '#6cc7c0', '#e58aa6', '#a3a9b3'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
 const running = (x) => x?.status === 'running' || x?.status === 'queued';
-const UNLIKELY = 0.15;
 const isActive = (j) => running(j) || running(j.proofread) || running(j.compare) || running(j.glossary);
+// Jev strongly disagreeing (<15%) almost always means a junk suggestion; tuck those away.
+const UNLIKELY = 0.15;
+const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
+// "1:14.9" / "1:02:03.4" for the timecode column.
+const timecode = (sec) => formatTime(sec, true);
 
 export default function Review({ jobId }) {
   const { providers, settings } = useApp();
@@ -21,9 +26,13 @@ export default function Review({ jobId }) {
   const [compareWith, setCompareWith] = useState('');
   const [playing, setPlaying] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [toast, setToast] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [showUnlikely, setShowUnlikely] = useState(false);
+  const [pickedLists, setPickedLists] = useState(null);
   const audio = useRef();
   const stopAt = useRef(null);
+  const toastTimer = useRef();
 
   const doneCount = job?.tracks.filter((t) => t.status === 'done').length ?? 0;
   useEffect(() => {
@@ -31,12 +40,10 @@ export default function Review({ jobId }) {
   }, [jobId, doneCount]);
 
   const threshold = settings.confidenceThreshold;
-  const [showUnlikely, setShowUnlikely] = useState(false);
   // Term lists for the glossary check; starts from what was ticked when transcribing.
-  const [pickedLists, setPickedLists] = useState(null);
   const checkLists = pickedLists ?? job?.options.termListIds ?? [];
   const toggleCheckList = (id) => setPickedLists(checkLists.includes(id) ? checkLists.filter((x) => x !== id) : [...checkLists, id]);
-  // Jev strongly disagreeing (<15%) almost always means a junk suggestion; tuck those away.
+
   const unlikely = (s) => s.verified != null && s.verified < UNLIKELY;
   const unlikelyCount = (job?.suggestions ?? []).filter((s) => s.status === 'open' && unlikely(s)).length;
   const openSuggestions = useMemo(() => {
@@ -61,6 +68,43 @@ export default function Review({ jobId }) {
       .filter((c) => !q || c.text.toLowerCase().includes(q));
   }, [job, trackFilter, show, search, threshold, openSuggestions]);
 
+  const say = (text) => {
+    clearTimeout(toastTimer.current);
+    setToast(text);
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  };
+
+  const act = async (fn) => {
+    setActionError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const undo = useCallback(
+    () =>
+      act(async () => {
+        const r = await api.post(`/api/jobs/${jobId}/undo`);
+        setJob((j) => ({ ...j, cues: r.cues, suggestions: r.suggestions, undoCount: r.undoCount, undoLabel: r.undoLabel }));
+        say(`Undid: ${r.label}`);
+      }),
+    [jobId],
+  );
+
+  // Ctrl+Z undoes transcript edits (but not while typing in a box).
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo]);
+
   if (loadError && !job) return <div className="error">{loadError}</div>;
   if (!job) return <p className="muted">Loading…</p>;
 
@@ -74,19 +118,15 @@ export default function Review({ jobId }) {
     return t ? (multiVideo ? `${t.mediaName} · ${t.label}` : t.label) : '?';
   };
   const hasProofreadKey = ['anthropic', 'openai', 'grok'].some((k) => settings.keys[k]);
-
-  const act = async (fn) => {
-    setActionError(null);
-    setNotice(null);
-    try {
-      await fn();
-    } catch (err) {
-      setActionError(err.message);
-    }
-  };
+  const words = job.tracks.reduce((n, t) => n + (t.wordCount || 0), 0);
+  const withUndo = (r) => setJob((j) => ({ ...j, undoCount: r.undoCount, undoLabel: r.undoLabel }));
 
   const play = (cue) => {
     const el = audio.current;
+    if (playing === cue.id) {
+      el.pause();
+      return;
+    }
     const t = job.tracks[cue.track];
     const src = `/api/media/${t.mediaId}/tracks/${t.index}/audio`;
     if (!el.src.endsWith(src)) el.src = src;
@@ -104,311 +144,335 @@ export default function Review({ jobId }) {
     }
   };
 
-  const updateCue = async (cue, patch) => {
-    const updated = await api.patch(`/api/jobs/${job.id}/cues/${encodeURIComponent(cue.id)}`, patch);
-    setJob((j) => ({ ...j, cues: j.cues.map((c) => (c.id === cue.id ? updated : c)) }));
-  };
-
-  const deleteCue = async (cue) => {
-    await api.del(`/api/jobs/${job.id}/cues/${encodeURIComponent(cue.id)}`);
-    setJob((j) => ({ ...j, cues: j.cues.filter((c) => c.id !== cue.id) }));
-  };
-
-  const accept = (s, all) =>
+  const updateCue = (cue, patch, message) =>
     act(async () => {
-      const { cues: changed, suggestions } = await api.post(`/api/jobs/${job.id}/suggestions/${s.id}/accept`, { all });
-      const byId = new Map(changed.map((c) => [c.id, c]));
-      setJob((j) => ({ ...j, suggestions, cues: j.cues.map((c) => byId.get(c.id) ?? c) }));
+      const r = await api.patch(`/api/jobs/${job.id}/cues/${encodeURIComponent(cue.id)}`, patch);
+      setJob((j) => ({ ...j, cues: j.cues.map((c) => (c.id === cue.id ? r.cue : c)) }));
+      withUndo(r);
+      say(message);
+    });
+
+  const deleteCue = (cue) =>
+    act(async () => {
+      const r = await api.del(`/api/jobs/${job.id}/cues/${encodeURIComponent(cue.id)}`);
+      setJob((j) => ({ ...j, cues: j.cues.filter((c) => c.id !== cue.id) }));
+      withUndo(r);
+      say('Deleted line');
+    });
+
+  const accept = (s, all, to) =>
+    act(async () => {
+      const r = await api.post(`/api/jobs/${job.id}/suggestions/${s.id}/accept`, { all, to });
+      const byId = new Map(r.cues.map((c) => [c.id, c]));
+      setJob((j) => ({ ...j, suggestions: r.suggestions, cues: j.cues.map((c) => byId.get(c.id) ?? c) }));
+      withUndo(r);
+      say(`Changed "${s.from}" to "${to || s.to}"${r.cues.length > 1 ? ` in ${r.cues.length} lines` : ''}`);
     });
 
   const dismiss = (s) =>
     act(async () => {
-      const { suggestions } = await api.post(`/api/jobs/${job.id}/suggestions/${s.id}/dismiss`);
-      setJob((j) => ({ ...j, suggestions }));
-    });
-
-  const startProofread = () =>
-    act(async () => {
-      await api.post(`/api/jobs/${job.id}/proofread`);
-      refresh();
-    });
-
-  const startCompare = () =>
-    act(async () => {
-      await api.post(`/api/jobs/${job.id}/compare`, { provider: compareWith });
-      refresh();
+      const r = await api.post(`/api/jobs/${job.id}/suggestions/${s.id}/dismiss`);
+      setJob((j) => ({ ...j, suggestions: r.suggestions }));
+      withUndo(r);
+      say(`Ignored "${s.from}"`);
     });
 
   const rebuild = () =>
     act(async () => {
-      if (!window.confirm('Re-splitting the lines throws away your text edits and fix suggestions. Continue?')) return;
+      if (!window.confirm('Re-splitting the lines throws away your text edits, fix suggestions and undo history. Continue?')) return;
       const data = await api.post(`/api/jobs/${job.id}/rebuild`);
       setJob((j) => ({ ...j, ...data }));
     });
 
-  const saveNextToVideos = () =>
+  const exportTo = (dir) =>
     act(async () => {
-      const { written } = await api.post(`/api/jobs/${job.id}/export`, { labels });
-      setNotice({ text: `Saved ${written.length} file${written.length === 1 ? '' : 's'} next to the video${written.length === 1 ? '' : 's'}.`, path: written[0] });
+      const { written } = await api.post(`/api/jobs/${job.id}/export`, { labels, dir });
+      setNotice({ text: `Saved ${plural(written.length, 'file')}`, path: written[0] });
     });
 
-  const saveToFolder = () =>
-    act(async () => {
-      const dir = await desktop.pickFolder();
-      if (!dir) return;
-      const { written } = await api.post(`/api/jobs/${job.id}/export`, { labels, dir });
-      setNotice({ text: `Saved ${written.length} file${written.length === 1 ? '' : 's'}.`, path: written[0] });
-    });
+  const saveToFolder = async () => {
+    const dir = await desktop.pickFolder();
+    if (dir) exportTo(dir);
+  };
 
   const srtUrl = (f) => `/api/jobs/${job.id}/srt?file=${encodeURIComponent(f.key)}${f.merged && !labels ? '&labels=0' : ''}`;
   const canSaveNext = files.some((f) => f.canSaveNextToVideo);
+  const checking = job.status === 'done' && (running(job.glossary) || running(job.proofread) || running(job.compare));
 
   return (
-    <div className="stack">
-      <div className="crumbs">
-        <a href="#/">Projects</a> › <a href={`#/projects/${job.projectId}`}>{job.project?.name ?? 'Project'}</a> ›
-      </div>
-
-      <section className="card">
+    <div className="review">
+      <header className="page-head">
+        <div className="crumbs">
+          <a href="#/">Projects</a>
+          <span>/</span>
+          <a href={`#/projects/${job.projectId}`}>{job.project?.name ?? 'Project'}</a>
+        </div>
         <div className="row">
-          <div className="grow">
-            <h1>{job.project?.name}</h1>
-            <div className="muted small">
-              {provider?.name} · {job.model} · {new Date(job.createdAt).toLocaleString()}
-            </div>
-          </div>
+          <h1 className="grow">{job.project?.name}</h1>
           <StatusPill status={job.status} />
         </div>
-
-        <div className="track-status">
+        <div className="meta">
+          {provider?.name} · {job.model} · {new Date(job.createdAt).toLocaleString()}
+          {words > 0 && ` · ${words.toLocaleString()} words`}
+        </div>
+        <div className="track-list">
           {job.tracks.map((t, pos) => (
-            <div key={pos} className="track-status-row">
-              <span className="chip" style={{ '--c': trackColor(pos) }}>{trackName(pos)}</span>
-              {t.status === 'running' && (t.progress != null ? <Progress value={t.progress} /> : <span className="muted small">Transcribing…</span>)}
-              {t.status === 'queued' && <span className="muted small">Waiting…</span>}
-              {t.status === 'done' && (
-                <span className="muted small">
-                  {t.wordCount} words{t.language ? ` · ${t.language}` : ''}
-                </span>
-              )}
-              {t.status === 'error' && <span className="error-text small">{t.error}</span>}
+            <div key={pos} className="track-line">
+              <span className="dot" style={{ background: trackColor(pos) }} />
+              <span>{trackName(pos)}</span>
+              {t.status === 'running' && (t.progress != null ? <Progress value={t.progress} /> : <span className="muted">transcribing…</span>)}
+              {t.status === 'queued' && <span className="muted">waiting…</span>}
+              {t.status === 'done' && <span className="muted">{t.wordCount.toLocaleString()} words{t.language ? ` · ${t.language}` : ''}</span>}
+              {t.status === 'error' && <span className="error-text">{t.error}</span>}
             </div>
           ))}
         </div>
+        {(running(job) || job.tracks.some((t) => t.status === 'error')) && (
+          <div className="row">
+            {running(job) && <button onClick={() => act(() => api.post(`/api/jobs/${job.id}/cancel`))}>Cancel</button>}
+            {!running(job) && (
+              <button onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/retry`); refresh(); })}>Retry failed tracks</button>
+            )}
+          </div>
+        )}
+      </header>
 
-        <div className="row wrap">
-          {running(job) && <button onClick={() => act(() => api.post(`/api/jobs/${job.id}/cancel`))}>Cancel</button>}
-          {!running(job) && job.tracks.some((t) => t.status !== 'done') && (
-            <button onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/retry`); refresh(); })}>Retry failed tracks</button>
-          )}
-        </div>
-        {actionError && <div className="error">{actionError}</div>}
-      </section>
+      {actionError && <div className="error">{actionError}</div>}
 
-      {job.status === 'done' && (running(job.glossary) || running(job.proofread) || running(job.compare)) && (
-        <div className="checking-banner">
-          <span className="spinner" /> Checking the transcript for mistakes… Suggestions will show up below on their own, usually within a minute.
+      {checking && (
+        <div className="strip">
+          <span className="spinner" /> Checking for mistakes. Suggestions appear below as they come in, usually within a minute.
         </div>
       )}
-      {!isActive(job) && suggestionCount > 0 && show === 'all' && (
-        <div className="found-banner">
+      {!checking && suggestionCount > 0 && show === 'all' && (
+        <div className="strip strip-accent">
           <span className="grow">
-            Found <b>{suggestionCount}</b> possible mistake{suggestionCount === 1 ? '' : 's'} to review.
+            {plural(suggestionCount, 'possible mistake')} to review.
           </span>
-          <button
-            className="primary small-btn"
-            onClick={() => {
-              setShow('issues');
-              requestAnimationFrame(() => document.querySelector('.toolbar')?.scrollIntoView({ behavior: 'smooth' }));
-            }}
-          >
-            Review them
-          </button>
+          <button className="primary" onClick={() => setShow('issues')}>Review</button>
         </div>
       )}
 
-      {doneCount > 0 && (
-        <section className="card">
-          <h3>Find mistakes</h3>
-          <div className="finder">
-            <div className="finder-row">
-              <div className="grow">
-                <strong>Glossary check</strong> <span className="muted small">free · instant</span>
-                <div className="muted small">
+      <div className="review-layout">
+        <section className="transcript">
+          {job.cues.length > 0 ? (
+            <>
+              <div className="toolbar">
+                <div className="segmented">
+                  <button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>
+                    All <span className="count">{job.cues.length}</span>
+                  </button>
+                  <button className={show === 'issues' ? 'on' : ''} onClick={() => setShow('issues')}>
+                    Needs a look <span className="count">{issueCount}</span>
+                  </button>
+                </div>
+                {job.tracks.length > 1 && (
+                  <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)}>
+                    <option value="all">All tracks</option>
+                    {job.tracks.map((t, pos) => (
+                      <option key={pos} value={pos}>{trackName(pos)}</option>
+                    ))}
+                  </select>
+                )}
+                <input className="grow search" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <button className="ghost" disabled={!job.undoCount} onClick={undo} title={job.undoLabel ? `Undo: ${job.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}>
+                  <Icon name="undo" /> Undo
+                </button>
+              </div>
+
+              <div className="list-hint">
+                Click a timecode to play the line, click text to edit it.
+                {!anyConfidence && ` ${provider?.name} has no per-word confidence, so flags come from the checks on the right.`}
+                {unlikelyCount > 0 && (
+                  <>
+                    {' '}
+                    <button className="link-btn" onClick={() => setShowUnlikely(!showUnlikely)}>
+                      {showUnlikely ? 'Hide' : 'Show'} {plural(unlikelyCount, 'unlikely suggestion')}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <audio ref={audio} onTimeUpdate={onTime} onPause={() => setPlaying(null)} />
+
+              <ul className="cues">
+                {cues.map((c) => (
+                  <CueRow
+                    key={c.id}
+                    cue={c}
+                    label={job.tracks.length > 1 ? trackName(c.track) : null}
+                    color={trackColor(c.track)}
+                    lowConfidence={lowConfidence(c)}
+                    suggestions={openSuggestions.get(c.id) || []}
+                    allSuggestions={job.suggestions}
+                    threshold={threshold}
+                    playing={playing === c.id}
+                    onPlay={() => play(c)}
+                    onSave={(text) => updateCue(c, { text }, 'Edited line')}
+                    onReviewed={() => updateCue(c, { reviewed: true }, 'Marked as checked')}
+                    onDelete={() => deleteCue(c)}
+                    onAccept={accept}
+                    onDismiss={dismiss}
+                  />
+                ))}
+              </ul>
+              {!cues.length && <p className="empty">{show === 'issues' ? 'Nothing left to look at.' : 'No lines match.'}</p>}
+            </>
+          ) : (
+            <p className="empty">{running(job) ? 'Transcribing… lines appear here when each track finishes.' : 'No lines.'}</p>
+          )}
+        </section>
+
+        {doneCount > 0 && (
+          <aside className="side">
+            {files.length > 0 && (
+              <div className="side-section">
+                <h3>Export</h3>
+                {desktop && (
+                  <div className="stack-tight">
+                    {canSaveNext && (
+                      <button className="primary" onClick={() => exportTo()} title="Writes the .srt files into each video's folder. Files with the same name are replaced.">
+                        Save next to the videos
+                      </button>
+                    )}
+                    <button onClick={saveToFolder}>
+                      <Icon name="folder" /> Save to folder…
+                    </button>
+                  </div>
+                )}
+                {notice && (
+                  <div className="saved">
+                    <Icon name="check" /> {notice.text}
+                    {desktop && notice.path && (
+                      <button className="link-btn" onClick={() => desktop.showItemInFolder(notice.path)}>Show</button>
+                    )}
+                  </div>
+                )}
+                <ul className="file-list">
+                  {files.map((f) => (
+                    <li key={f.key}>
+                      <a href={srtUrl(f)} download={f.filename} title="Download">
+                        <Icon name="download" />
+                        <span>{f.filename}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+                {files.some((f) => f.merged) && (
+                  <label className="check">
+                    <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> Track names in merged files
+                  </label>
+                )}
+              </div>
+            )}
+
+            <div className="side-section">
+              <h3>Checks</h3>
+
+              <div className="check-item">
+                <div className="check-head">
+                  <span>Glossary</span>
+                  <button
+                    className="ghost small"
+                    disabled={running(job.glossary) || !checkLists.length}
+                    onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/glossary`, { termListIds: checkLists }); refresh(); })}
+                  >
+                    {job.glossary ? 'Run again' : 'Run'}
+                  </button>
+                </div>
+                <p>
                   {running(job.glossary)
                     ? 'Checking…'
                     : job.glossary?.status === 'done'
                       ? job.glossary.terms
-                        ? `${job.glossary.count} sound-alike${job.glossary.count === 1 ? '' : 's'} found against ${job.glossary.terms.toLocaleString()} terms`
-                        : 'No term lists were ticked for this transcript. Tick some below and check again.'
+                        ? `${plural(job.glossary.count, 'sound-alike')} against ${job.glossary.terms.toLocaleString()} terms.`
+                        : 'No term lists were ticked. Pick some and run again.'
                       : job.glossary?.status === 'error'
                         ? <span className="error-text">{job.glossary.error}</span>
-                        : 'Compares every phrase against your term lists by sound ("Couples Stone" → "Cobblestone").'}
-                </div>
+                        : 'Matches phrases against your term lists by sound. Free.'}
+                </p>
                 {settings.termLists.length > 0 && (
-                  <div className="chips finder-chips">
+                  <div className="toggles">
                     {settings.termLists.map((l) => (
-                      <button key={l.id} className={`chip-toggle ${checkLists.includes(l.id) ? 'on' : ''}`} onClick={() => toggleCheckList(l.id)}>
-                        {checkLists.includes(l.id) ? '✓ ' : ''}
-                        {l.name}
-                      </button>
+                      <label key={l.id} className="check">
+                        <input type="checkbox" checked={checkLists.includes(l.id)} onChange={() => toggleCheckList(l.id)} /> {l.name}
+                      </label>
                     ))}
                   </div>
                 )}
               </div>
-              <button
-                disabled={running(job.glossary) || !checkLists.length}
-                onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/glossary`, { termListIds: checkLists }); refresh(); })}
-              >
-                {job.glossary ? 'Check again' : 'Check'}
-              </button>
-            </div>
-            <div className="finder-row">
-              <div className="grow">
-                <strong>AI proofread</strong>
-                <div className="muted small">
+
+              <div className="check-item">
+                <div className="check-head">
+                  <span>AI proofread</span>
+                  <button className="ghost small" disabled={!hasProofreadKey || running(job.proofread)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/proofread`); refresh(); })}>
+                    {job.proofread ? 'Run again' : 'Run'}
+                  </button>
+                </div>
+                <p>
                   {running(job.proofread)
-                    ? `Reading the transcript… ${Math.round((job.proofread.progress || 0) * 100)}%`
+                    ? `Reading… ${Math.round((job.proofread.progress || 0) * 100)}%`
                     : job.proofread?.status === 'done'
-                      ? `Found ${job.proofread.count} possible mistake${job.proofread.count === 1 ? '' : 's'} (${job.proofread.by})`
+                      ? `${plural(job.proofread.count, 'suggestion')} · ${job.proofread.by}`
                       : job.proofread?.status === 'error'
                         ? <span className="error-text">{job.proofread.error}</span>
                         : hasProofreadKey
-                          ? 'Reads the whole transcript and flags misheard words like "Couples Stone" → "Cobblestone".'
-                          : 'Add a Claude, OpenAI or xAI key in Settings to use this.'}
-                </div>
+                          ? 'Reads the transcript for misheard words.'
+                          : 'Needs a Claude, OpenAI or xAI key in Settings.'}
+                </p>
               </div>
-              <button disabled={!hasProofreadKey || running(job.proofread)} onClick={startProofread}>
-                {job.proofread ? 'Run again' : 'Proofread'}
-              </button>
-            </div>
-            <div className="finder-row">
-              <div className="grow">
-                <strong>Compare with another transcriber</strong>
-                <div className="muted small">
+
+              <div className="check-item">
+                <div className="check-head">
+                  <span>Second opinion</span>
+                </div>
+                <p>
                   {running(job.compare)
                     ? job.compareJob?.status === 'running'
                       ? `Transcribing with ${providers.transcribers.find((p) => p.id === job.compare.provider)?.name}…`
                       : 'Comparing…'
                     : job.compare?.status === 'done'
-                      ? `${job.compare.count} place${job.compare.count === 1 ? '' : 's'} where ${providers.transcribers.find((p) => p.id === job.compare.provider)?.name} heard something different`
+                      ? `${plural(job.compare.count, 'place')} where ${providers.transcribers.find((p) => p.id === job.compare.provider)?.name} heard something else.`
                       : job.compare?.status === 'error'
                         ? <span className="error-text">{job.compare.error}</span>
-                        : 'Transcribes again with a second service and flags every word they disagree on.'}
+                        : 'Transcribe again with another service and flag disagreements.'}
+                </p>
+                <div className="row">
+                  <select className="grow" value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={running(job.compare)}>
+                    <option value="">Service…</option>
+                    {providers.transcribers
+                      .filter((p) => p.id !== job.provider && settings.keys[p.id])
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                  </select>
+                  <button disabled={!compareWith || running(job.compare)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/compare`, { provider: compareWith }); refresh(); })}>
+                    Run
+                  </button>
                 </div>
               </div>
-              <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={running(job.compare)}>
-                <option value="">Pick service…</option>
-                {providers.transcribers
-                  .filter((p) => p.id !== job.provider && settings.keys[p.id])
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-              </select>
-              <button disabled={!compareWith || running(job.compare)} onClick={startCompare}>Compare</button>
-            </div>
-          </div>
-        </section>
-      )}
 
-      {files.length > 0 && (
-        <section className="card export">
-          <h3>Subtitles</h3>
-          {desktop && (
-            <div className="row wrap">
-              {canSaveNext && <button className="primary" onClick={saveNextToVideos} title="Writes the .srt files into the same folder as each video. Files with the same name are replaced.">Save all next to the videos</button>}
-              <button onClick={saveToFolder}>Save all to folder…</button>
-            </div>
-          )}
-          {notice && (
-            <div className="ok-box">
-              {notice.text}
-              {desktop && notice.path && (
-                <button className="ghost small-btn" onClick={() => desktop.showItemInFolder(notice.path)}>Show in folder</button>
-              )}
-            </div>
-          )}
-          <div className="row wrap">
-            {files.map((f) => (
-              <a key={f.key} className={`button ${!desktop && f.merged ? 'primary' : ''}`} href={srtUrl(f)} download={f.filename}>
-                ⬇ {f.filename}
-              </a>
-            ))}
-          </div>
-          {files.some((f) => f.merged) && (
-            <label className="inline">
-              <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> In merged files, start each line with the track name
-            </label>
-          )}
-        </section>
-      )}
-
-      {job.cues.length > 0 && (
-        <section>
-          <div className="toolbar">
-            <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)}>
-              <option value="all">All tracks</option>
-              {job.tracks.map((t, pos) => (
-                <option key={pos} value={pos}>{trackName(pos)}</option>
-              ))}
-            </select>
-            <div className="segmented">
-              <button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>All lines</button>
-              <button className={show === 'issues' ? 'on' : ''} onClick={() => setShow('issues')}>
-                Needs a look ({issueCount})
+              <button className="link-btn subtle" onClick={rebuild} title="Rebuild lines from the words using the subtitle settings">
+                Re-split lines…
               </button>
             </div>
-            <input className="grow" placeholder="Search text…" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button className="ghost" onClick={rebuild} title="Re-split lines using the subtitle settings">Re-split lines</button>
-          </div>
+          </aside>
+        )}
+      </div>
 
-          <p className="hint">
-            Click a time to hear the line. Click text to edit it.
-            {suggestionCount > 0 && ` ${suggestionCount} suggested fix${suggestionCount === 1 ? '' : 'es'} below. "Fix all" applies it to every line with the same words.`}
-            {!anyConfidence && ` ${provider?.name} doesn't give per-word confidence, so rely on the proofread and compare tools above.`}
-            {unlikelyCount > 0 && (
-              <>
-                {' '}
-                <button className="link-btn" onClick={() => setShowUnlikely(!showUnlikely)}>
-                  {showUnlikely ? 'Hide' : 'Show'} {unlikelyCount} unlikely suggestion{unlikelyCount === 1 ? '' : 's'}
-                </button>{' '}
-                (Jev rated them under {Math.round(UNLIKELY * 100)}%).
-              </>
-            )}
-          </p>
-
-          <audio ref={audio} onTimeUpdate={onTime} onPause={() => setPlaying(null)} />
-
-          <ul className="cues">
-            {cues.map((c) => (
-              <CueRow
-                key={c.id}
-                cue={c}
-                label={trackName(c.track)}
-                color={trackColor(c.track)}
-                multi={job.tracks.length > 1}
-                lowConfidence={lowConfidence(c)}
-                suggestions={openSuggestions.get(c.id) || []}
-                allSuggestions={job.suggestions}
-                threshold={threshold}
-                playing={playing === c.id}
-                onPlay={() => play(c)}
-                onSave={(text) => updateCue(c, { text })}
-                onReviewed={() => updateCue(c, { reviewed: true })}
-                onDelete={() => deleteCue(c)}
-                onAccept={accept}
-                onDismiss={dismiss}
-              />
-            ))}
-          </ul>
-          {!cues.length && <p className="muted">No lines match.</p>}
-        </section>
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast}</span>
+          {job.undoCount > 0 && (
+            <button className="link-btn" onClick={undo}>Undo</button>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function CueRow({ cue, label, color, multi, lowConfidence, suggestions, allSuggestions, threshold, playing, onPlay, onSave, onReviewed, onDelete, onAccept, onDismiss }) {
+function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions, threshold, playing, onPlay, onSave, onReviewed, onDelete, onAccept, onDismiss }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(cue.text);
 
@@ -418,70 +482,113 @@ function CueRow({ cue, label, color, multi, lowConfidence, suggestions, allSugge
   };
 
   const flagged = lowConfidence || suggestions.length > 0;
-  const sameCount = (s) => allSuggestions.filter((x) => x.status === 'open' && x.from.toLowerCase() === s.from.toLowerCase()).length;
 
   return (
     <li className={`cue ${flagged ? 'flagged' : ''} ${playing ? 'playing' : ''}`}>
-      <div className="cue-main">
-        <button className="time" onClick={onPlay} title="Play this line">
-          {playing ? '■' : '▶'} {formatTime(cue.start, true)}
-        </button>
-        {multi && <span className="chip" style={{ '--c': color }}>{label}</span>}
-        <div className="cue-text grow">
-          {editing ? (
-            <textarea
-              autoFocus
-              rows={2}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={save}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  save();
-                }
-                if (e.key === 'Escape') {
-                  setDraft(cue.text);
-                  setEditing(false);
-                }
-              }}
-            />
-          ) : (
-            <div
-              className="text"
-              onClick={() => {
-                setDraft(cue.text);
-                setEditing(true);
-              }}
-            >
-              <CueText cue={cue} threshold={threshold} highlights={suggestions.map((s) => s.from)} />
-              {cue.edited && <span className="edited" title="Edited">✎</span>}
-            </div>
-          )}
-        </div>
-        <div className="cue-actions">
-          {lowConfidence && !suggestions.length && (
-            <button className="ghost small-btn" title="Looks right, clear the flag" onClick={onReviewed}>✓</button>
-          )}
-          <button className="ghost small-btn" title="Delete line" onClick={onDelete}>🗑</button>
-        </div>
-      </div>
-      {suggestions.map((s) => {
-        const n = sameCount(s);
-        return (
-          <div key={s.id} className="suggestion">
-            <span className={`source source-${s.source}`}>{s.source === 'ai' ? 'AI' : s.sourceLabel}</span>
-            <span className="from">{s.from}</span>→<strong className="to">{s.to}</strong>
-            {s.reason && s.source === 'ai' && <span className="muted small">{s.reason}</span>}
-            {s.verified != null && <span className={`verified ${s.verified >= 0.8 ? 'high' : s.verified < 0.4 ? 'low' : ''}`} title="Jev's confidence that the fix is right">{Math.round(s.verified * 100)}%</span>}
-            <span className="grow" />
-            <button className="small-btn primary" onClick={() => onAccept(s, false)}>Fix</button>
-            {n > 1 && <button className="small-btn" onClick={() => onAccept(s, true)}>Fix all {n}</button>}
-            <button className="ghost small-btn" title="Ignore" onClick={() => onDismiss(s)}>✕</button>
+      <button className="tc" onClick={onPlay} title={playing ? 'Stop' : 'Play this line'}>
+        <Icon name={playing ? 'pause' : 'play'} size={12} />
+        {timecode(cue.start)}
+      </button>
+      <div className="cue-body">
+        {label && (
+          <div className="cue-track">
+            <span className="dot" style={{ background: color }} /> {label}
           </div>
-        );
-      })}
+        )}
+        {editing ? (
+          <textarea
+            className="cue-edit"
+            autoFocus
+            rows={Math.max(2, draft.split('\n').length)}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                save();
+              }
+              if (e.key === 'Escape') {
+                setDraft(cue.text);
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <div
+            className="cue-text"
+            title="Click to edit"
+            onClick={() => {
+              setDraft(cue.text);
+              setEditing(true);
+            }}
+          >
+            <CueText cue={cue} threshold={threshold} highlights={suggestions.map((s) => s.from)} />
+            {cue.edited && <span className="edited">edited</span>}
+          </div>
+        )}
+        {suggestions.map((s) => (
+          <Suggestion key={s.id} s={s} allSuggestions={allSuggestions} onAccept={onAccept} onDismiss={onDismiss} />
+        ))}
+      </div>
+      <div className="cue-actions">
+        {lowConfidence && !suggestions.length && (
+          <button className="icon-btn" title="Looks right, clear the flag" onClick={onReviewed}>
+            <Icon name="check" />
+          </button>
+        )}
+        <button className="icon-btn" title="Delete line" onClick={onDelete}>
+          <Icon name="trash" />
+        </button>
+      </div>
     </li>
+  );
+}
+
+// One suggested fix. The replacement is editable before you apply it.
+function Suggestion({ s, allSuggestions, onAccept, onDismiss }) {
+  const [to, setTo] = useState(s.to);
+  const same = allSuggestions.filter((x) => x.status === 'open' && x.from.toLowerCase() === s.from.toLowerCase()).length;
+  const edited = to.trim() !== s.to;
+  const source = s.source === 'ai' ? 'AI' : s.source === 'glossary' ? 'Glossary' : s.sourceLabel;
+  const conf = s.verified;
+
+  return (
+    <div className="sug">
+      <span className="sug-from">{s.from}</span>
+      <span className="sug-arrow">→</span>
+      <input
+        className={`sug-to ${edited ? 'changed' : ''}`}
+        value={to}
+        size={Math.max(4, to.length + 1)}
+        onChange={(e) => setTo(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && to.trim()) onAccept(s, false, to.trim());
+          if (e.key === 'Escape') setTo(s.to);
+        }}
+        title="Edit the replacement, then Fix"
+      />
+      <span className="sug-meta">
+        {source}
+        {s.source === 'ai' && s.reason && ` · ${s.reason}`}
+        {conf != null && (
+          <span className={`conf ${conf >= 0.8 ? 'hi' : conf < 0.4 ? 'lo' : ''}`} title="Jev's confidence that the fix is right">
+            {' '}
+            · {Math.round(conf * 100)}%
+          </span>
+        )}
+      </span>
+      <span className="grow" />
+      <div className="sug-actions">
+        <button className="primary small" disabled={!to.trim()} onClick={() => onAccept(s, false, to.trim())}>Fix</button>
+        {same > 1 && (
+          <button className="small" disabled={!to.trim()} onClick={() => onAccept(s, true, to.trim())}>
+            Fix all {same}
+          </button>
+        )}
+        <button className="ghost small" onClick={() => onDismiss(s)}>Ignore</button>
+      </div>
+    </div>
   );
 }
 

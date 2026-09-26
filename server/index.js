@@ -4,6 +4,7 @@ import { exec } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import busboy from 'busboy';
 import express from 'express';
+import * as history from './history.js';
 import * as jobs from './jobs.js';
 import { parseTermList } from './glossary.js';
 import { proofreaderList } from './proofreaders.js';
@@ -258,7 +259,14 @@ app.get('/api/jobs/:id', (req, res) => {
     compareJob: compareJob && { id: compareJob.id, provider: compareJob.provider, status: compareJob.status, error: compareJob.error },
     cues: jobs.readCues(job.id),
     suggestions: jobs.readSuggestions(job.id),
+    ...history.summary(job.id),
   });
+});
+
+app.post('/api/jobs/:id/undo', (req, res) => {
+  if (!store.getJob(req.params.id)) return notFound(res);
+  const result = history.undo(req.params.id);
+  return result ? res.json(result) : res.status(400).json({ error: 'Nothing to undo' });
 });
 
 app.post('/api/jobs/:id/retry', (req, res) => {
@@ -276,7 +284,9 @@ app.post('/api/jobs/:id/cancel', (req, res) => {
 
 app.post('/api/jobs/:id/rebuild', (req, res) => {
   if (!store.getJob(req.params.id)) return notFound(res);
-  res.json({ cues: jobs.rebuildCues(req.params.id), suggestions: [] });
+  const cues = jobs.rebuildCues(req.params.id);
+  history.clear(req.params.id);
+  res.json({ cues, suggestions: [], ...history.summary(req.params.id) });
 });
 
 app.post('/api/jobs/:id/glossary', (req, res) => {
@@ -332,29 +342,32 @@ app.patch('/api/jobs/:id/cues/:cueId', (req, res) => {
   const cue = cues.find((c) => c.id === req.params.cueId);
   if (!cue) return notFound(res);
   const { text, start, end, reviewed } = req.body;
+  const label = typeof text === 'string' && text !== cue.text ? `Edit line at ${Math.floor(cue.start / 60)}:${String(Math.floor(cue.start % 60)).padStart(2, '0')}` : 'Mark as checked';
+  history.record(req.params.id, label, { cueIds: [cue.id] });
   if (typeof text === 'string' && text !== cue.text) Object.assign(cue, { text, edited: true });
   if (Number.isFinite(start)) cue.start = start;
   if (Number.isFinite(end)) cue.end = end;
   if (typeof reviewed === 'boolean') cue.reviewed = reviewed;
   jobs.writeCues(req.params.id, cues);
-  res.json(cue);
+  res.json({ cue, ...history.summary(req.params.id) });
 });
 
 app.delete('/api/jobs/:id/cues/:cueId', (req, res) => {
+  history.record(req.params.id, 'Delete line', { cueIds: [req.params.cueId] });
   jobs.writeCues(req.params.id, jobs.readCues(req.params.id).filter((c) => c.id !== req.params.cueId));
-  res.json({ ok: true });
+  res.json({ ok: true, ...history.summary(req.params.id) });
 });
 
 app.post('/api/jobs/:id/suggestions/:sid/accept', (req, res) => {
   try {
-    res.json(sug.acceptSuggestion(req.params.id, req.params.sid, req.body));
+    res.json({ ...sug.acceptSuggestion(req.params.id, req.params.sid, req.body), ...history.summary(req.params.id) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 app.post('/api/jobs/:id/suggestions/:sid/dismiss', (req, res) => {
-  res.json({ suggestions: sug.dismissSuggestion(req.params.id, req.params.sid) });
+  res.json({ suggestions: sug.dismissSuggestion(req.params.id, req.params.sid), ...history.summary(req.params.id) });
 });
 
 app.delete('/api/jobs/:id', (req, res) => {

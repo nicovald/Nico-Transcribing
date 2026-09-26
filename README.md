@@ -12,6 +12,7 @@ Windows desktop app that turns the audio tracks of videos into timestamped **.sr
   - **AI proofread** (Claude, OpenAI or Grok) reads the transcript with your project description and suggests fixes. You click **Fix** or **Fix all**.
   - **Compare** transcribes again with a second service and flags every word the two disagree on.
   - Optional **Jev (TypeSafe)** check scores each suggested fix with a confidence %.
+- **Review**: edit any line, edit a suggested fix before applying it, and **Undo** (button, toast or Ctrl+Z) any fix, ignore, edit or delete.
 - **Save all next to the videos**: one SRT per track plus a merged SRT per video, written straight into the video's folder.
 
 ## For editors
@@ -102,6 +103,7 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 | POST | `/api/jobs/:id/compare` | `{ provider }` |
 | POST | `/api/jobs/:id/suggestions/:sid/accept` | `{ all?, to? }` |
 | POST | `/api/jobs/:id/suggestions/:sid/dismiss` | |
+| POST | `/api/jobs/:id/undo` | Reverts the last edit (history in `jobs/<id>/history.json`, 100 steps) |
 | PATCH/DELETE | `/api/jobs/:id/cues/:cueId` | `{ text, start, end, reviewed }` |
 | GET | `/api/jobs/:id/srt-files` · `/api/jobs/:id/srt?file=<key>` | List / download |
 | POST | `/api/jobs/:id/export` | `{ dir?, labels?, keys? }`: write SRTs next to videos or into `dir` |

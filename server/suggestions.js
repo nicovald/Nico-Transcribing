@@ -9,6 +9,7 @@
 //               verified: number|null, status: 'open'|'accepted'|'dismissed' }
 import { providers } from './providers/index.js';
 import { request } from './providers/http.js';
+import * as history from './history.js';
 import { pickProofreader } from './proofreaders.js';
 import * as store from './store.js';
 import { glossaryCheck, termPicker } from './glossary.js';
@@ -330,6 +331,11 @@ export function acceptSuggestion(jobId, suggestionId, { all = false, to } = {}) 
   if (!s) throw new Error('Suggestion not found');
   const replacement = to?.trim() || s.to;
   const cues = readCues(jobId);
+  const targets = cues.filter((cue) => (all || cue.id === s.cueId) && containsPhrase(cue.text, s.from));
+  history.record(jobId, `${all && targets.length > 1 ? `Fix all ${targets.length}` : 'Fix'}: "${s.from}" → "${replacement}"`, {
+    cueIds: targets.map((c) => c.id),
+    withSuggestions: true,
+  });
   const changed = [];
   for (const cue of cues) {
     if (!(all || cue.id === s.cueId) || !containsPhrase(cue.text, s.from)) continue;
@@ -349,7 +355,10 @@ export function acceptSuggestion(jobId, suggestionId, { all = false, to } = {}) 
 export function dismissSuggestion(jobId, suggestionId) {
   const suggestions = readSuggestions(jobId);
   const s = suggestions.find((x) => x.id === suggestionId);
-  if (s) s.status = 'dismissed';
+  if (s) {
+    history.record(jobId, `Ignore: "${s.from}" → "${s.to}"`, { withSuggestions: true });
+    s.status = 'dismissed';
+  }
   writeSuggestions(jobId, suggestions);
   return suggestions;
 }
