@@ -19,6 +19,7 @@ Windows desktop app (Electron) for editors: import multi-track/multicam videos i
 - Claude calls go through `@anthropic-ai/sdk` (not raw fetch).
 - Never modify or rename the user's video files. Display names are ours only.
 - Editors are non-technical: errors must be readable in the UI.
+- Design: "bright, playful productivity UI" (light theme, overrides the global dark default). Ice-blue `#F3F8FC` canvas, white rounded cards, one vivid blue `#126CE0` primary action per screen (secondary actions use `.soft`/plain buttons), green for status/done, amber for things to review, navy text, Plus Jakarta Sans (bundled), outline icons from `Icon` in `shared.jsx` (no emoji), tactile buttons. Tokens live in `web/src/styles.css` `:root`.
 - Bump `version` in package.json for releases (footer + `/api/version` + installer name).
 
 ## Run / verify

@@ -155,8 +155,8 @@ export function Logo() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
       <rect x="1" y="1" width="18" height="18" rx="5" fill="var(--accent)" />
-      <rect x="5" y="7" width="10" height="2" rx="1" fill="var(--bg)" />
-      <rect x="5" y="11" width="6.5" height="2" rx="1" fill="var(--bg)" />
+      <rect x="5" y="7" width="10" height="2" rx="1" fill="#fff" />
+      <rect x="5" y="11" width="6.5" height="2" rx="1" fill="#fff" />
     </svg>
   );
 }

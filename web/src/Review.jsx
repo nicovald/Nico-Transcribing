@@ -4,7 +4,7 @@ import { useApp } from './App.jsx';
 import { desktop, Icon, Progress, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 
-const TRACK_COLORS = ['#7aa2f7', '#e0a36b', '#8cc98f', '#c49bea', '#d9c36a', '#6cc7c0', '#e58aa6', '#a3a9b3'];
+const TRACK_COLORS = ['#126ce0', '#e0701a', '#1a9e5c', '#8b4fd8', '#c99a0a', '#0f9bb0', '#d6407a', '#5b6b7d'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
 const running = (x) => x?.status === 'running' || x?.status === 'queued';
 const isActive = (j) => running(j) || running(j.proofread) || running(j.compare) || running(j.glossary);
@@ -249,7 +249,7 @@ export default function Review({ jobId }) {
           <span className="grow">
             {plural(suggestionCount, 'possible mistake')} to review.
           </span>
-          <button className="primary" onClick={() => setShow('issues')}>Review</button>
+          <button className="soft small" onClick={() => setShow('issues')}>Review</button>
         </div>
       )}
 
@@ -580,7 +580,7 @@ function Suggestion({ s, allSuggestions, onAccept, onDismiss }) {
       </span>
       <span className="grow" />
       <div className="sug-actions">
-        <button className="primary small" disabled={!to.trim()} onClick={() => onAccept(s, false, to.trim())}>Fix</button>
+        <button className="soft small" disabled={!to.trim()} onClick={() => onAccept(s, false, to.trim())}>Fix</button>
         {same > 1 && (
           <button className="small" disabled={!to.trim()} onClick={() => onAccept(s, true, to.trim())}>
             Fix all {same}

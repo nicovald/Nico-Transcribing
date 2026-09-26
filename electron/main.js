@@ -52,12 +52,12 @@ async function createWindow() {
   const origin = `http://127.0.0.1:${port}`;
 
   win = new BrowserWindow({
-    width: 1200,
+    width: Number(process.env.SCREENSHOT_WIDTH) || 1200,
     height: 900,
     minWidth: 420,
     minHeight: 500,
     title: 'Grok Transcriber',
-    backgroundColor: '#0f1115',
+    backgroundColor: '#f3f8fc',
     autoHideMenuBar: true,
     icon: path.join(here, 'icon.png'),
     webPreferences: {
