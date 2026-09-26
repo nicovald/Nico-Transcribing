@@ -411,6 +411,9 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
           onChange={(e) => setOpt('keyterms', e.target.value)}
           placeholder="Extra terms just for this video, comma separated (player names, mod names…)"
         />
+        {settings.termLists.length > 0 && !draft.options.termListIds.length && (
+          <span className="hint warn-text">No term lists ticked, so game words won't be checked against your lists. Click a list above to use it.</span>
+        )}
         {termCount > 0 && (
           <span className="hint">
             {termCount} priority term{termCount === 1 ? '' : 's'} go to the transcriber{termCount > 100 ? ' (Grok uses the first 100)' : ''}; the full lists are used to check the transcript afterwards.

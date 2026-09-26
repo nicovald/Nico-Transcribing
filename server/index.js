@@ -280,7 +280,13 @@ app.post('/api/jobs/:id/rebuild', (req, res) => {
 });
 
 app.post('/api/jobs/:id/glossary', (req, res) => {
-  if (!store.getJob(req.params.id)) return notFound(res);
+  const job = store.getJob(req.params.id);
+  if (!job) return notFound(res);
+  // Lets you tick term lists after the fact and re-check (they also feed the next proofread).
+  if (Array.isArray(req.body.termListIds)) {
+    job.options = { ...job.options, termListIds: req.body.termListIds };
+    store.saveJob(job);
+  }
   sug.runGlossaryCheck(req.params.id);
   res.json({ ok: true });
 });

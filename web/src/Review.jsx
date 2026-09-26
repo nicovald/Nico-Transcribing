@@ -7,6 +7,7 @@ import usePoll from './usePoll.js';
 const TRACK_COLORS = ['#5eb1ff', '#ff8f5e', '#7ee08a', '#d98cff', '#ffd05e', '#5ee0d2', '#ff6b9a', '#b8c0cc'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
 const running = (x) => x?.status === 'running' || x?.status === 'queued';
+const UNLIKELY = 0.15;
 const isActive = (j) => running(j) || running(j.proofread) || running(j.compare) || running(j.glossary);
 
 export default function Review({ jobId }) {
@@ -30,15 +31,23 @@ export default function Review({ jobId }) {
   }, [jobId, doneCount]);
 
   const threshold = settings.confidenceThreshold;
+  const [showUnlikely, setShowUnlikely] = useState(false);
+  // Term lists for the glossary check; starts from what was ticked when transcribing.
+  const [pickedLists, setPickedLists] = useState(null);
+  const checkLists = pickedLists ?? job?.options.termListIds ?? [];
+  const toggleCheckList = (id) => setPickedLists(checkLists.includes(id) ? checkLists.filter((x) => x !== id) : [...checkLists, id]);
+  // Jev strongly disagreeing (<15%) almost always means a junk suggestion; tuck those away.
+  const unlikely = (s) => s.verified != null && s.verified < UNLIKELY;
+  const unlikelyCount = (job?.suggestions ?? []).filter((s) => s.status === 'open' && unlikely(s)).length;
   const openSuggestions = useMemo(() => {
     const map = new Map();
     for (const s of job?.suggestions ?? []) {
-      if (s.status !== 'open') continue;
+      if (s.status !== 'open' || (!showUnlikely && unlikely(s))) continue;
       if (!map.has(s.cueId)) map.set(s.cueId, []);
       map.get(s.cueId).push(s);
     }
     return map;
-  }, [job]);
+  }, [job, showUnlikely]);
   const lowConfidence = (c) => !c.edited && !c.reviewed && c.words?.some((w) => w.confidence != null && w.confidence < threshold);
   const hasIssue = (c) => openSuggestions.has(c.id) || lowConfidence(c);
 
@@ -196,6 +205,28 @@ export default function Review({ jobId }) {
         {actionError && <div className="error">{actionError}</div>}
       </section>
 
+      {job.status === 'done' && (running(job.glossary) || running(job.proofread) || running(job.compare)) && (
+        <div className="checking-banner">
+          <span className="spinner" /> Checking the transcript for mistakes… Suggestions will show up below on their own, usually within a minute.
+        </div>
+      )}
+      {!isActive(job) && suggestionCount > 0 && show === 'all' && (
+        <div className="found-banner">
+          <span className="grow">
+            Found <b>{suggestionCount}</b> possible mistake{suggestionCount === 1 ? '' : 's'} to review.
+          </span>
+          <button
+            className="primary small-btn"
+            onClick={() => {
+              setShow('issues');
+              requestAnimationFrame(() => document.querySelector('.toolbar')?.scrollIntoView({ behavior: 'smooth' }));
+            }}
+          >
+            Review them
+          </button>
+        </div>
+      )}
+
       {doneCount > 0 && (
         <section className="card">
           <h3>Find mistakes</h3>
@@ -209,14 +240,27 @@ export default function Review({ jobId }) {
                     : job.glossary?.status === 'done'
                       ? job.glossary.terms
                         ? `${job.glossary.count} sound-alike${job.glossary.count === 1 ? '' : 's'} found against ${job.glossary.terms.toLocaleString()} terms`
-                        : 'No term lists were ticked for this transcript.'
+                        : 'No term lists were ticked for this transcript. Tick some below and check again.'
                       : job.glossary?.status === 'error'
                         ? <span className="error-text">{job.glossary.error}</span>
                         : 'Compares every phrase against your term lists by sound ("Couples Stone" → "Cobblestone").'}
                 </div>
+                {settings.termLists.length > 0 && (
+                  <div className="chips finder-chips">
+                    {settings.termLists.map((l) => (
+                      <button key={l.id} className={`chip-toggle ${checkLists.includes(l.id) ? 'on' : ''}`} onClick={() => toggleCheckList(l.id)}>
+                        {checkLists.includes(l.id) ? '✓ ' : ''}
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <button disabled={running(job.glossary)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/glossary`); refresh(); })}>
-                {job.glossary ? 'Run again' : 'Check'}
+              <button
+                disabled={running(job.glossary) || !checkLists.length}
+                onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/glossary`, { termListIds: checkLists }); refresh(); })}
+              >
+                {job.glossary ? 'Check again' : 'Check'}
               </button>
             </div>
             <div className="finder-row">
@@ -322,6 +366,15 @@ export default function Review({ jobId }) {
             Click a time to hear the line. Click text to edit it.
             {suggestionCount > 0 && ` ${suggestionCount} suggested fix${suggestionCount === 1 ? '' : 'es'} below. "Fix all" applies it to every line with the same words.`}
             {!anyConfidence && ` ${provider?.name} doesn't give per-word confidence, so rely on the proofread and compare tools above.`}
+            {unlikelyCount > 0 && (
+              <>
+                {' '}
+                <button className="link-btn" onClick={() => setShowUnlikely(!showUnlikely)}>
+                  {showUnlikely ? 'Hide' : 'Show'} {unlikelyCount} unlikely suggestion{unlikelyCount === 1 ? '' : 's'}
+                </button>{' '}
+                (Jev rated them under {Math.round(UNLIKELY * 100)}%).
+              </>
+            )}
           </p>
 
           <audio ref={audio} onTimeUpdate={onTime} onPause={() => setPlaying(null)} />
