@@ -67,6 +67,16 @@ export default function Project({ projectId }) {
           <EditableText value={project.name} onSave={(name) => patchProject({ name })} />
         </h1>
         <label>
+          Preset
+          <select value={project.presetId || ''} onChange={(e) => patchProject({ presetId: e.target.value || null })}>
+            <option value="">No preset</option>
+            {settings.presets.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <span className="hint">Fills in the description, term lists, language and track names below. Manage presets in Settings.</span>
+        </label>
+        <label>
           What's in this video?
           <ContextInput value={project.context} onSave={(context) => patchProject({ context })} />
           <span className="hint">Helps the AI proofread fix game terms and names, e.g. "Minecraft modded survival, players Sundee and Crainer".</span>
@@ -114,7 +124,9 @@ export default function Project({ projectId }) {
         ))}
       </section>
 
-      {project.media.some((m) => m.status === 'ready') && <Setup project={project} providers={providers.transcribers} settings={settings} />}
+      {project.media.some((m) => m.status === 'ready') && (
+        <Setup key={project.presetId || 'none'} project={project} providers={providers.transcribers} settings={settings} onPresetSaved={(presetId) => patchProject({ presetId })} />
+      )}
 
       {project.jobs.length > 0 && (
         <section>
@@ -209,36 +221,44 @@ function ContextInput({ value, onSave }) {
   );
 }
 
-function Setup({ project, providers, settings }) {
-  const last = settings.lastOptions;
+function Setup({ project, providers, settings, onPresetSaved }) {
+  const { reloadSettings } = useApp();
+  const preset = settings.presets.find((p) => p.id === project.presetId) ?? null;
+  const draftKey = `${project.id}:${project.presetId || ''}`;
+  // Defaults come from the project's preset, otherwise from what you used last time.
+  const base = preset ?? { ...settings.lastOptions };
   const [draft, setDraftState] = useState(
     () =>
-      drafts.get(project.id) ?? {
+      drafts.get(draftKey) ?? {
         tracks: {}, // key -> { on, label }
-        provider: last.provider,
+        provider: base.provider || settings.lastOptions.provider,
         options: {
-          language: last.language,
-          termListIds: last.termListIds || [],
-          keyterms: last.keyterms || '',
-          voiceCleanup: last.voiceCleanup,
-          fillerWords: last.fillerWords,
-          diarize: last.diarize,
+          language: base.language ?? 'en',
+          termListIds: (base.termListIds || []).filter((id) => settings.termLists.some((l) => l.id === id)),
+          keyterms: base.keyterms || '',
+          voiceCleanup: base.voiceCleanup ?? true,
+          fillerWords: base.fillerWords ?? false,
+          diarize: base.diarize ?? false,
         },
       },
   );
+  const [saving, setSaving] = useState(null); // null | { name }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   const setDraft = (fn) =>
     setDraftState((d) => {
       const next = fn(d);
-      drafts.set(project.id, next);
+      drafts.set(draftKey, next);
       return next;
     });
 
   const ready = project.media.filter((m) => m.status === 'ready');
   const trackState = (m, t) =>
-    draft.tracks[trackKey(m.id, t.index)] ?? { on: true, label: t.title || `Track ${t.index + 1}` };
+    draft.tracks[trackKey(m.id, t.index)] ?? {
+      on: preset?.tracks?.[t.index]?.on ?? true,
+      label: preset?.tracks?.[t.index]?.name || t.title || `Track ${t.index + 1}`,
+    };
   const setTrack = (m, t, patch) =>
     setDraft((d) => ({ ...d, tracks: { ...d.tracks, [trackKey(m.id, t.index)]: { ...trackState(m, t), ...patch } } }));
   const setOpt = (k, v) => setDraft((d) => ({ ...d, options: { ...d.options, [k]: v } }));
@@ -249,12 +269,37 @@ function Setup({ project, providers, settings }) {
   const hasKey = (id) => Boolean(settings.keys[id]);
   const termCount = settings.termLists.filter((l) => draft.options.termListIds.includes(l.id)).reduce((n, l) => n + l.terms.split(/[\n,]/).filter((t) => t.trim()).length, 0);
 
+  // Snapshot of the current setup; the track layout comes from the first video.
+  const presetFromDraft = (name, id) => ({
+    id,
+    name,
+    context: project.context || '',
+    provider: draft.provider,
+    ...draft.options,
+    tracks: (ready[0]?.tracks || []).map((t) => {
+      const st = trackState(ready[0], t);
+      return { name: st.label, on: st.on };
+    }),
+  });
+
+  const savePreset = async (asNew) => {
+    const name = asNew ? saving?.name?.trim() : preset.name;
+    if (!name) return;
+    const id = asNew ? crypto.randomUUID() : preset.id;
+    const next = asNew ? [...settings.presets, presetFromDraft(name, id)] : settings.presets.map((p) => (p.id === id ? presetFromDraft(name, id) : p));
+    await api.put('/api/settings', { presets: next });
+    await reloadSettings();
+    setSaving(null);
+    drafts.delete(draftKey);
+    if (asNew) onPresetSaved(id);
+  };
+
   const start = async () => {
     setBusy(true);
     setError(null);
     try {
       const job = await api.post('/api/jobs', { projectId: project.id, provider: draft.provider, tracks: chosen, options: draft.options });
-      drafts.delete(project.id);
+      drafts.delete(draftKey);
       navigate(`/jobs/${job.id}`);
     } catch (err) {
       setError(err.message);
@@ -360,9 +405,34 @@ function Setup({ project, providers, settings }) {
           No key for this provider yet. <a href="#/settings">Add it in Settings</a>.
         </div>
       )}
-      <button className="primary big-btn" disabled={busy || !chosen.length || !hasKey(draft.provider)} onClick={start}>
-        {busy ? 'Starting…' : `Transcribe ${chosen.length} track${chosen.length === 1 ? '' : 's'}`}
-      </button>
+      <div className="row wrap">
+        <button className="primary big-btn" disabled={busy || !chosen.length || !hasKey(draft.provider)} onClick={start}>
+          {busy ? 'Starting…' : `Transcribe ${chosen.length} track${chosen.length === 1 ? '' : 's'}`}
+        </button>
+        <span className="grow" />
+        {saving ? (
+          <form
+            className="row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              savePreset(true);
+            }}
+          >
+            <input autoFocus value={saving.name} onChange={(e) => setSaving({ name: e.target.value })} placeholder="Preset name, e.g. ATM10 To The Sky" />
+            <button className="primary" disabled={!saving.name.trim()}>Save</button>
+            <button type="button" className="ghost" onClick={() => setSaving(null)}>Cancel</button>
+          </form>
+        ) : (
+          <>
+            {preset && (
+              <button title="Overwrite the preset with the choices above" onClick={() => savePreset(false)}>
+                Update "{preset.name}"
+              </button>
+            )}
+            <button onClick={() => setSaving({ name: '' })}>Save as new preset</button>
+          </>
+        )}
+      </div>
     </section>
   );
 }

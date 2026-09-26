@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { useApp } from './App.jsx';
 import { desktop } from './shared.jsx';
 import TermLists from './TermLists.jsx';
+import Presets from './Presets.jsx';
 import Updates from './Updates.jsx';
 
 const EXTRA_KEYS = [
@@ -120,6 +121,8 @@ export default function Settings() {
         {EXTRA_KEYS.map((k) => keyRow(k))}
         <p className="hint">OpenAI and xAI proofreading use the same keys as the transcription services above.</p>
       </section>
+
+      <Presets />
 
       <TermLists />
 

@@ -248,3 +248,9 @@ textarea.drop-over { outline: 2px dashed var(--accent); }
 
 .update-bar { display: flex; align-items: center; gap: 12px; padding: 8px 20px; background: #13291a; border-bottom: 1px solid #2a5a35; color: #b6f0c0; font-size: 14px; }
 .update-status { font-size: 14px; }
+
+.preset-bar { display: flex; align-items: center; gap: 10px; margin-bottom: -6px; flex-wrap: wrap; }
+.preset-bar select { min-width: 220px; }
+.preset-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--panel-2); border-radius: 8px; }
+.preset-card input, .preset-card select, .preset-card textarea { background: var(--panel); }
+.layout-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }

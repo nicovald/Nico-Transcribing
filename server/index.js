@@ -120,9 +120,19 @@ app.get('/api/projects/:id', (req, res) => {
   return p ? res.json(projectView(p)) : notFound(res);
 });
 
+const findPreset = (id) => (id ? store.getSettings().presets.find((x) => x.id === id) ?? null : null);
+
 app.post('/api/projects', (req, res) => {
-  const project = { id: crypto.randomUUID(), name: String(req.body.name || 'Untitled project').trim(), context: '', createdAt: new Date().toISOString() };
+  const preset = findPreset(req.body.presetId);
+  const project = {
+    id: crypto.randomUUID(),
+    name: String(req.body.name || 'Untitled project').trim(),
+    presetId: preset?.id ?? null,
+    context: preset?.context ?? '',
+    createdAt: new Date().toISOString(),
+  };
   store.saveProject(project);
+  if (preset) store.saveSettings({ lastPresetId: preset.id });
   res.json(projectView(project));
 });
 
@@ -131,6 +141,14 @@ app.patch('/api/projects/:id', (req, res) => {
   if (!p) return notFound(res);
   if (typeof req.body.name === 'string' && req.body.name.trim()) p.name = req.body.name.trim();
   if (typeof req.body.context === 'string') p.context = req.body.context;
+  if ('presetId' in req.body) {
+    const preset = findPreset(req.body.presetId);
+    // Switching preset brings its description along, unless you've written your own.
+    const oldContext = findPreset(p.presetId)?.context ?? '';
+    if (preset && (!p.context || p.context === oldContext)) p.context = preset.context || '';
+    p.presetId = preset?.id ?? null;
+    store.saveSettings({ lastPresetId: p.presetId });
+  }
   store.saveProject(p);
   res.json(projectView(p));
 });

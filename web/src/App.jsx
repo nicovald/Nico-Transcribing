@@ -53,10 +53,10 @@ export default function App() {
 
   // Add video files to a project (creating one named after the first file if needed).
   // Desktop: files are read in place by path. Browser: uploaded one at a time.
-  const addFiles = async (files, projectId) => {
+  const addFiles = async (files, projectId, presetId) => {
     if (!projectId) {
       const name = files[0].name.replace(/\.[^.]+$/, '');
-      projectId = (await api.post('/api/projects', { name })).id;
+      projectId = (await api.post('/api/projects', { name, presetId })).id;
     }
     const paths = desktop ? files.map((f) => desktop.pathForFile(f)).filter(Boolean) : [];
     if (desktop && paths.length === files.length) {
@@ -83,10 +83,10 @@ export default function App() {
     }
   };
 
-  const addPaths = async (paths, projectId) => {
+  const addPaths = async (paths, projectId, presetId) => {
     if (!projectId) {
       const name = paths[0].split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
-      projectId = (await api.post('/api/projects', { name })).id;
+      projectId = (await api.post('/api/projects', { name, presetId })).id;
     }
     await api.post(`/api/projects/${projectId}/media`, { paths });
     bumpData();

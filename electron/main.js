@@ -6,8 +6,14 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+// Screenshot smoke tests get their own profile so they can run next to a real window.
+if (process.env.SCREENSHOT) app.setPath('userData', path.join(app.getPath('temp'), 'grok-transcriber-screenshot'));
+
 // Only one copy of the app at a time; a second launch focuses the first window.
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) {
+  console.log('Grok Transcriber is already running; focusing that window instead.');
+  app.quit();
+}
 
 // Packaged: keep data in %APPDATA%/Grok Transcriber. Dev (npm run app): use the repo's ./data.
 process.env.DATA_DIR ??= app.isPackaged ? path.join(app.getPath('userData'), 'data') : path.join(here, '..', 'data');
@@ -108,6 +114,7 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(createWindow).catch((err) => {
+  console.error(err);
   dialog.showErrorBox('Grok Transcriber failed to start', String(err?.stack || err));
   app.quit();
 });

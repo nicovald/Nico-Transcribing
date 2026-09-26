@@ -28,6 +28,11 @@ export const DEFAULT_SETTINGS = {
   },
   // Reusable key-term lists, e.g. one per game.
   termLists: [],
+  // Presets bundle everything that repeats for a series (e.g. "ATM10 To The Sky"):
+  // { id, name, context, termListIds, keyterms, language, provider, voiceCleanup,
+  //   diarize, fillerWords, tracks: [{ name, on }] } where tracks[i] is audio track i.
+  presets: [],
+  lastPresetId: null,
   // AI proofread: provider 'claude' | 'openai' | 'grok' (falls back to whichever has a key).
   proofread: { auto: true, provider: 'claude', models: {} },
   confidenceThreshold: 0.6,

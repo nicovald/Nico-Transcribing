@@ -7,10 +7,12 @@ import usePoll from './usePoll.js';
 const busy = (p) => p.media.some((m) => m.status === 'importing' || m.status === 'queued') || p.jobs.some((j) => j.status === 'running');
 
 export default function Home({ active }) {
-  const { addFiles, addPaths, dataVersion } = useApp();
+  const { addFiles, addPaths, dataVersion, settings } = useApp();
   const [projects, setProjects, refresh] = usePoll(() => api.get('/api/projects'), (list) => active && list.some(busy), 2000, [dataVersion, active]);
   const [error, setError] = useState(null);
   const [pathInput, setPathInput] = useState('');
+  const [presetId, setPresetId] = useState(() => (settings.presets.some((p) => p.id === settings.lastPresetId) ? settings.lastPresetId : ''));
+  const preset = presetId || null;
   const fileInput = useRef();
 
   const run = async (fn) => {
@@ -26,7 +28,7 @@ export default function Home({ active }) {
   const browse = () => {
     if (desktop) run(async () => {
       const paths = await desktop.pickVideos();
-      return paths.length ? addPaths(paths) : null;
+      return paths.length ? addPaths(paths, null, preset) : null;
     });
     else fileInput.current.click();
   };
@@ -45,7 +47,18 @@ export default function Home({ active }) {
 
   return (
     <div className="stack">
-      <DropTarget className="dropzone" onFiles={(files) => run(() => addFiles(files))}>
+      {settings.presets.length > 0 && (
+        <div className="preset-bar">
+          <span className="muted">New projects use</span>
+          <select value={presetId} onChange={(e) => setPresetId(e.target.value)}>
+            <option value="">No preset</option>
+            {settings.presets.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <DropTarget className="dropzone" onFiles={(files) => run(() => addFiles(files, null, preset))}>
         <div onClick={browse} className="dropzone-inner">
           <div className="big">🎬</div>
           <strong>Drop videos here to start a project</strong>
@@ -61,7 +74,7 @@ export default function Home({ active }) {
           onChange={(e) => {
             const files = [...e.target.files].filter(isMediaFile);
             e.target.value = '';
-            if (files.length) run(() => addFiles(files));
+            if (files.length) run(() => addFiles(files, null, preset));
           }}
         />
       </DropTarget>
@@ -73,7 +86,7 @@ export default function Home({ active }) {
             e.preventDefault();
             const paths = pathInput.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
             run(async () => {
-              const id = await addPaths(paths);
+              const id = await addPaths(paths, null, preset);
               setPathInput('');
               return id;
             });

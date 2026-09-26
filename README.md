@@ -2,6 +2,7 @@
 
 Windows desktop app that turns the audio tracks of videos into timestamped **.srt subtitles** with AI speech-to-text, then helps you catch the words it got wrong. Built for editors working with multi-track, multicam gaming recordings.
 
+- **Presets** per series or recording setup ("Minecraft vanilla", "ATM10 To The Sky"): description, term lists, player names, language, provider and track layout ("Track 1 = Sundee mic, Track 3 = game audio, skip"). Pick one before dropping videos and the project comes pre-filled; create them from any project with **Save as new preset**.
 - **Projects**: drop one or more videos (multicam) and rename the project and each video for your own tracking. Your actual files are never renamed or moved.
 - Every audio track is pulled out automatically. Name them ("Sundee mic", "Game audio") and tick the ones to transcribe.
 - Transcribe with **Grok (xAI)**, **Deepgram**, **AssemblyAI**, **ElevenLabs Scribe** or **OpenAI Whisper**. The language and options you pick are remembered.
@@ -21,6 +22,16 @@ Windows desktop app that turns the audio tracks of videos into timestamped **.sr
 4. When it's done, go through **Needs a look**, fix what's wrong, then **Save all next to the videos**.
 
 You can switch pages while things are running; nothing stops.
+
+## Updates
+
+The installed app updates itself from GitHub Releases of the private repo `nicovald/Video-Transcribing`. Each editor pastes a fine-grained GitHub token (Repository: Video-Transcribing, Contents: Read-only) in **Settings → Updates**. It checks on start and every 4 hours, downloads in the background, then shows **Restart to update**.
+
+To publish a release: bump `version` in package.json, commit and push, then:
+
+```bash
+GH_TOKEN=$(gh auth token) npm run release   # builds the installer and uploads it + latest.yml to a GitHub release
+```
 
 ## Providers
 
