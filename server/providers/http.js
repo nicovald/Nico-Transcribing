@@ -16,7 +16,14 @@ export async function fileBlob(file) {
 }
 
 export async function request(url, { signal, ...init } = {}) {
-  const res = await undiciFetch(url, { ...init, signal, dispatcher });
+  let res;
+  try {
+    res = await undiciFetch(url, { ...init, signal, dispatcher });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    // Network-level failure (offline, DNS, timeout): still say which service.
+    throw new Error(`Couldn't reach ${serviceName(url)}. Check your internet connection and try again. (${err.cause?.code || err.cause?.message || err.message})`);
+  }
   const body = await res.text();
   let json = null;
   try {
@@ -26,11 +33,53 @@ export async function request(url, { signal, ...init } = {}) {
   }
   if (!res.ok) {
     const detail = json?.error?.message || json?.error || json?.detail?.message || json?.detail || json?.err_msg || json?.message || body.slice(0, 300);
-    const err = new Error(`HTTP ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    const err = new Error(describeError(url, res.status, typeof detail === 'string' ? detail : JSON.stringify(detail)));
     err.status = res.status;
     throw err;
   }
   return json;
+}
+
+// Where each provider's billing lives, so "out of credits" errors say whose credits.
+const services = {
+  'api.x.ai': { name: 'Grok (xAI)', url: 'console.x.ai → Billing' },
+  'api.openai.com': { name: 'OpenAI', url: 'platform.openai.com/settings/organization/billing' },
+  'api.deepgram.com': { name: 'Deepgram', url: 'console.deepgram.com → Billing' },
+  'api.assemblyai.com': { name: 'AssemblyAI', url: 'assemblyai.com/dashboard → Billing' },
+  'api.elevenlabs.io': { name: 'ElevenLabs', url: 'elevenlabs.io/app/subscription' },
+  'api.anthropic.com': { name: 'Claude (Anthropic)', url: 'platform.claude.com → Billing' },
+  'api.typesafe.ai': { name: 'TypeSafe (Jev)' },
+  'raw.githubusercontent.com': { name: 'GitHub' },
+};
+
+export function serviceName(url) {
+  let host = '';
+  try { host = new URL(url).host; } catch {}
+  return services[host]?.name || host || 'The provider';
+}
+
+// Every API error starts with the service's name, so editors know which one failed.
+// Billing/quota and rate-limit errors get a plain sentence instead of the raw text.
+export function describeError(url, status, detail) {
+  const raw = `HTTP ${status}: ${detail}`;
+  let host = '';
+  try { host = new URL(url).host; } catch {}
+  const svc = services[host];
+  const name = serviceName(url);
+  const isRate = /rate limit|per minute|too many requests/i.test(detail);
+  const isBilling = status === 402 || (/credit|spending limit|spend limit|quota|billing|balance|insufficient funds/i.test(detail) && !isRate);
+  if (isBilling) {
+    const where = svc?.url ? ` Add credits or raise the limit at ${svc.url}.` : '';
+    // xAI sends one message for both cases (plus a team ID), so say that plainly instead.
+    if (host === 'api.x.ai' && /spending limit/i.test(detail) && /credits/i.test(detail)) {
+      return `${name} account is out of prepaid credits or hit its monthly spending limit (xAI doesn't say which).${where}`;
+    }
+    return `${name} account is out of credits or over its spending limit.${where} (${raw})`;
+  }
+  if (status === 429 || isRate) return `${name} is rate-limiting requests (too many at once). Wait a minute and retry. (${raw})`;
+  if (status === 401) return `${name} rejected the API key. Check it in Settings. (${raw})`;
+  if (status >= 500) return `${name} is having server trouble right now. Try again later. (${raw})`;
+  return `${name}: ${raw}`;
 }
 
 export const sleep = (ms, signal) =>

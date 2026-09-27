@@ -1,7 +1,7 @@
 // LLM backends for the AI proofread pass. Each takes a system prompt, the transcript
 // lines and a JSON schema, and returns the parsed JSON object.
 import Anthropic from '@anthropic-ai/sdk';
-import { request } from './providers/http.js';
+import { request, describeError } from './providers/http.js';
 
 export const proofreaders = {
   claude: {
@@ -36,6 +36,11 @@ export const proofreaders = {
         .catch((err) => {
           if (err instanceof Anthropic.AuthenticationError) throw new Error('Your Anthropic key was rejected. Check it in Settings.');
           if (err instanceof Anthropic.NotFoundError) throw new Error(`Claude model "${model}" was not found. Check the model name in Settings.`);
+          if (err instanceof Anthropic.APIConnectionError && !signal?.aborted) throw new Error(`Couldn't reach Claude (Anthropic). Check your internet connection and try again.`);
+          if (err instanceof Anthropic.APIError && err.status) {
+            const detail = err.error?.error?.message || err.message;
+            throw new Error(describeError('https://api.anthropic.com', err.status, detail));
+          }
           throw err;
         });
       if (response.stop_reason === 'refusal') throw new Error('Claude declined to proofread this part of the transcript.');

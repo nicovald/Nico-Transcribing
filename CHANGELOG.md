@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.16.1 (2026-09-27)
+- API errors now say **which service** failed (e.g. "Grok (xAI) account is out of prepaid credits…"), with plain wording for out-of-credits, rate limits, rejected keys, provider outages and connection problems. Covers transcription, AI proofread (incl. Claude) and Jev.
+
 ## 0.16.0 (2026-09-27)
 - Ready for a public repo: updates come from the public GitHub releases with **no token needed** (a saved token still works), MIT license, and the README is written for anyone.
 - New installs start with an empty people list; studios share theirs through the settings file (Ctrl+Shift+T). Existing installs keep their list.
