@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.11.0 (2026-09-26)
+- Term lists are collapsible (collapsed by default, showing their counts; the app remembers which are open) and each has **Export** to save it as a file. **Import list** adds an exported list, so teammates can share game and modpack lists.
+
 ## 0.10.0 (2026-09-26)
 - Team setup: press **Ctrl+Shift+T** anywhere and drop a `.env` file to load a studio's API keys. Keys are saved like typed ones (protected by Windows, masked in the UI) and never sent back to the page.
 

@@ -503,3 +503,12 @@ button.gold:active:not(:disabled) { box-shadow: 0 0 0 var(--gold-deep); }
 .team-drop.drop-over { border-color: var(--accent); background: var(--accent-soft); outline: none; }
 .team-result { align-items: flex-start; }
 .team-result .icon { margin-top: 3px; }
+
+/* Collapsible term lists. */
+.term-list.closed { gap: 0; padding: 10px 12px; }
+.list-toggle .icon { transition: transform 0.15s; }
+.term-list.open .list-toggle .icon { transform: rotate(90deg); }
+button.list-summary { justify-content: flex-start; gap: 12px; min-height: 36px; padding: 4px 6px; background: transparent; border: 0; box-shadow: none; overflow: hidden; }
+button.list-summary:hover:not(:disabled) { background: transparent; }
+button.list-summary:active:not(:disabled) { transform: none; }
+button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
