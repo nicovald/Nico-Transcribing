@@ -17,7 +17,9 @@ The package version is the source of truth for the UI, API and installer.
 The release command requires a clean working tree, local HEAD equal to GitHub's
 current `main`, matching package/lockfile versions, a changelog entry, and an
 unused version tag. It installs from the lockfile, runs tests, builds the
-installer and runs the smoke suite against the **packaged executable**.
+installer and runs the smoke suite against the **packaged executable**. Before
+uploading, it also requires a successful **Verify** workflow for that exact commit
+(waiting up to ten minutes for CI to finish).
 
 It verifies `latest.yml` against the installer's SHA-512 and size, writes
 `SHA256SUMS.txt` and `build-provenance.json`, and creates a **draft** release

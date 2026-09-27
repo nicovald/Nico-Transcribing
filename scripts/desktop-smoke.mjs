@@ -45,7 +45,8 @@ jobs.writeSuggestions(job.id,[
   {id:'s-smoke-red',cueId:'1-3',from:'red stone',to:'Redstone',source:'learned',tier:'unsure',reason:'Fixed 2 of 2 times before',status:'open'},
 ]);
 const fixture = {projectId:project.id,jobId:job.id,source};
-const executable = process.argv[2] || path.join(root,'node_modules/electron/dist/electron.exe');
+// Electron 44 downloads lazily through its Node entry point after a clean npm ci.
+const executable = process.argv[2] || (await import('electron')).default;
 async function capture(name,hash,script) {
   const env = {...process.env,SCREENSHOT:path.join(folder,`${name}.png`),SCREENSHOT_HASH:hash,SCREENSHOT_DELAY:'800',SCREENSHOT_WIDTH:'1280'};
   if(script) env.SCREENSHOT_JS = script; else delete env.SCREENSHOT_JS;

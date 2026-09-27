@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { assertReleaseState, digest, releaseNotes, verifyUpdateMetadata } from './release-utils.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,6 +63,17 @@ files.push('release/SHA256SUMS.txt');
 fs.writeFileSync('release/release-notes.md', `${changelog}\n\n### Install\n\nDownload **${path.basename(installer)}** below for Windows 10/11 x64. The installer is unsigned; Windows may show a SmartScreen warning. Bring your own transcription API key; provider usage is billed separately.\n\nExisting installations keep their local projects and settings. Public releases need no update token; private repositories require access.\n\n### Verification and source\n\nSHA256SUMS.txt contains the asset checksums; build-provenance.json identifies the tested commit. The FFmpeg source archive, build details and third-party notices are included below. The source archive covers FFmpeg itself; external-library versions are recorded in FFmpeg-build-details.txt.\n`);
 
 // Fail before creating anything remotely if files changed during the build.
+const deadline = Date.now() + 10 * 60_000;
+for (;;) {
+  const [ci] = JSON.parse(gh('run', 'list', '--repo', repository, '--workflow', 'ci.yml', '--commit', head, '--limit', '1', '--json', 'status,conclusion'));
+  if (ci?.status === 'completed') {
+    if (ci.conclusion !== 'success') throw new Error('The Verify workflow failed for this commit. Nothing was published.');
+    break;
+  }
+  if (Date.now() >= deadline) throw new Error('Verify workflow did not complete within ten minutes. Nothing was published.');
+  console.log('Waiting for Windows/Linux CI to finish…');
+  await delay(15_000);
+}
 preflight();
 const expected = Object.fromEntries(files.map(file => [path.basename(file), digest(file)]));
 run('gh', ['release', 'create', tag, ...files, '--repo', repository, '--draft', '--target', head, '--title', `Nico's Transcriber ${pkg.version}`, '--notes-file', 'release/release-notes.md']);
