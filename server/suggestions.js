@@ -10,7 +10,7 @@
 import { providers } from './providers/index.js';
 import { request } from './providers/http.js';
 import { readTranscript, updateTranscript } from './transcript.js';
-import { pickProofreader } from './proofreaders.js';
+import { modelFor, pickProofreader } from './proofreaders.js';
 import * as store from './store.js';
 import { glossaryCheck, termPicker } from './glossary.js';
 import { getMemory, memoryCheck, peopleContext, recordFix } from './memory.js';
@@ -294,7 +294,7 @@ export function startProofread(jobId) {
   return runStep(jobId, 'proofread', async (job, onProgress, signal) => {
     const settings = store.getSettings(), proofreader = pickProofreader(settings);
     if (!proofreader) throw new Error('AI proofread needs a Claude, OpenAI or xAI key. Add one in Settings.');
-    const model = settings.proofread.models?.[proofreader.id] || proofreader.defaultModel;
+    const model = modelFor(proofreader, settings);
     const project = store.getProject(job.projectId), snapshot = readCues(job.id), people = peopleContext();
     const context = [project?.context, people && `People often in these videos: ${people}`].filter(Boolean).join('\n');
     const found = await proofread(snapshot, {

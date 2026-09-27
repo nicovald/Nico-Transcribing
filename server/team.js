@@ -1,8 +1,9 @@
-// Team setup: a studio hands editors a .env file with the API keys it pays for.
-// Opened with Ctrl+Shift+T in the app. Values are stored like typed keys and never sent back.
-// The file can be password-locked (AES-256-GCM, scrypt key) so it is safe to send around.
-import crypto from 'node:crypto';
-import { badRequest } from './validation.js';
+// Team setup (Ctrl+Shift+T): a studio hands editors a .env file with the API keys it pays for,
+// and optionally a settings file with its suggested setup. Keys are stored like typed keys
+// and never sent back.
+import { exportMemory, importMemory } from './memory.js';
+import * as store from './store.js';
+import { badRequest, validateSettings } from './validation.js';
 
 // Common env names for each service's key.
 const ENV_NAMES = {
@@ -42,44 +43,64 @@ export function parseTeamEnv(text) {
   return { keys, services: Object.keys(keys).map((id) => SERVICE_NAMES[id]), ignored };
 }
 
-// ---------------------------------------------------------------- locked files
+// ---------------------------------------------------------------- settings files
 
-const KIND = 'grok-transcriber-team-setup';
-const SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
-const deriveKey = (password, salt) => crypto.scryptSync(String(password), salt, 32, SCRYPT);
+const KIND = 'grok-transcriber-settings';
 
-export function lockTeamEnv(text, password) {
-  if (!parseTeamEnv(text).services.length) throw badRequest('No API keys found in that file. Lines should look like XAI_API_KEY=your-key.');
-  if (typeof password !== 'string' || password.length < 8) throw badRequest('Use a password of at least 8 characters.');
-  const salt = crypto.randomBytes(16), iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', deriveKey(password, salt), iv);
-  const data = Buffer.concat([cipher.update(String(text), 'utf8'), cipher.final()]);
-  const b64 = (b) => b.toString('base64');
-  return { kind: KIND, version: 1, cipher: 'aes-256-gcm/scrypt', salt: b64(salt), iv: b64(iv), tag: b64(cipher.getAuthTag()), data: b64(data) };
+// Everything that makes up "how we work", never API keys.
+export function exportTeamSettings() {
+  const s = store.getSettings();
+  const { people, fixes } = exportMemory();
+  return {
+    kind: KIND,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    settings: {
+      cue: s.cue,
+      confidenceThreshold: s.confidenceThreshold,
+      proofread: s.proofread,
+      termLists: s.termLists,
+      presets: s.presets,
+    },
+    memory: { people, fixes },
+  };
 }
 
-const lockedFile = (text) => {
-  try {
-    const f = JSON.parse(text);
-    return f?.kind === KIND ? f : null;
-  } catch {
-    return null;
-  }
-};
+export const isSettingsFile = (data) => data?.kind === KIND;
 
-// The .env text from a plain or locked file. Locked without a password: error with needsPassword.
-export function openTeamFile(text, password) {
-  const f = lockedFile(text);
-  if (!f) return String(text);
-  if (!password) throw Object.assign(badRequest('This setup file is locked. Enter the password you were given.'), { needsPassword: true });
-  try {
-    const b = (s) => Buffer.from(String(s), 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', deriveKey(password, b(f.salt)), b(f.iv));
-    decipher.setAuthTag(b(f.tag));
-    return Buffer.concat([decipher.update(b(f.data)), decipher.final()]).toString('utf8');
-  } catch {
-    throw Object.assign(badRequest('That password does not unlock this file.'), { needsPassword: true });
-  }
+// Layout and proofreading are replaced; term lists and presets are merged (same id replaced,
+// new ones added, the editor's own kept); learned fixes and people merge like a memory import.
+export function importTeamSettings(data) {
+  if (!isSettingsFile(data) || !data.settings || typeof data.settings !== 'object') throw badRequest('This is not a settings file exported from Grok Transcriber.');
+  const incoming = data.settings;
+  const current = store.getSettings();
+  const merge = (mine, theirs) => {
+    if (!Array.isArray(theirs)) return mine;
+    const byId = new Map(mine.map((x) => [x.id, x]));
+    for (const item of theirs) byId.set(item.id, item);
+    return [...byId.values()];
+  };
+  const patch = {};
+  if (incoming.cue) patch.cue = incoming.cue;
+  if (incoming.confidenceThreshold != null) patch.confidenceThreshold = incoming.confidenceThreshold;
+  if (incoming.proofread) patch.proofread = incoming.proofread;
+  patch.termLists = merge(current.termLists, incoming.termLists);
+  patch.presets = merge(current.presets, incoming.presets);
+  validateSettings(patch);
+  store.saveSettings(patch);
+  let people = 0, fixes = 0;
+  if (data.memory) ({ people, fixes } = importMemory({ kind: 'grok-transcriber-memory', ...data.memory }));
+  return {
+    imported: [
+      'subtitle layout',
+      'proofreading',
+      `${plural(Array.isArray(incoming.termLists) ? incoming.termLists.length : 0, 'term list')}`,
+      `${plural(Array.isArray(incoming.presets) ? incoming.presets.length : 0, 'preset')}`,
+      `${plural(people, 'new person', 'new people')}`,
+      `${plural(fixes, 'new learned fix', 'new learned fixes')}`,
+    ].filter((item) => !item.startsWith('0 ')),
+  };
 }
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export const TEAM_ENV_NAMES = ENV_NAMES;

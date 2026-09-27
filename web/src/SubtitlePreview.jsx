@@ -32,7 +32,7 @@ const CLIP_END = WORDS.at(-1).end + 1.2;
 const stamp = (s) => `0:${s.toFixed(1).padStart(4, '0')}`;
 
 export default function SubtitlePreview({ cue, threshold }) {
-  const cues = useMemo(() => buildCues(WORDS, cue), [cue.maxLineChars, cue.maxLines, cue.maxDuration, cue.pauseSplit, cue.minDuration]);
+  const cues = useMemo(() => buildCues(WORDS, cue), [cue.maxLineChars, cue.maxLineWords, cue.maxLines, cue.maxDuration, cue.pauseSplit, cue.minDuration]);
   const [t, setT] = useState(0);
   const root = useRef();
 

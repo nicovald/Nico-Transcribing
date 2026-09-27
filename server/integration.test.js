@@ -212,19 +212,30 @@ test('team setup file saves keys without ever sending them back',async()=>{
   assert.equal(empty.status,400); assert.match(empty.body.error,/No API keys/);
   store.saveSettings({keys:{grok:'test-only'}});
 });
-test('locked team setup files import through the API with a password',async()=>{
-  const locked=(await call('/api/team-setup/lock','POST',{text:'OPENAI_API_KEY=sk-team-lock-4321',password:'studio password'})).body;
-  const text=JSON.stringify(locked);
-  const ask=await call('/api/team-setup','POST',{text});
-  assert.equal(ask.status,400); assert.equal(ask.body.needsPassword,true);
-  const ok=await call('/api/team-setup','POST',{text,password:'studio password'});
-  assert.deepEqual(ok.body.services,['OpenAI']);
-  assert.equal((await call('/api/settings')).body.keys.openai,'••••4321');
-  store.saveSettings({keys:{openai:''}});
-});
 test('proofreading model list explains a missing key instead of failing',async()=>{
   store.saveSettings({keys:{openai:''}});
   const r=await call('/api/proofreaders/openai/models');
   assert.equal(r.status,200); assert.deepEqual(r.body.models,[]); assert.match(r.body.error,/Add a OpenAI key/);
   assert.equal((await call('/api/providers')).body.proofreaders.find(p=>p.id==='openai').defaultModel,'gpt-6-luna');
+});
+test('settings export carries the setup but never keys, and imports back',async()=>{
+  store.saveSettings({keys:{grok:'xai-never-exported-777'},cue:{maxLineChars:32,maxLineWords:5},confidenceThreshold:.7,termLists:[{id:'list-a',name:'ATM10',terms:'Allthemodium',glossary:''}]});
+  const res=await fetch(`http://127.0.0.1:${server.address().port}/api/team-setup/settings-export`);
+  assert.match(res.headers.get('content-disposition'),/attachment/);
+  const file=await res.json();
+  assert.ok(!JSON.stringify(file).includes('xai-never-exported'));
+  assert.equal(file.settings.cue.maxLineWords,5);
+  store.saveSettings({cue:{maxLineChars:42,maxLineWords:0},confidenceThreshold:.6,termLists:[{id:'mine',name:'Mine',terms:'x',glossary:''}]});
+  const r=await call('/api/team-setup','POST',{text:JSON.stringify(file)});
+  assert.equal(r.status,200); assert.ok(r.body.imported.includes('subtitle layout'));
+  const s=store.getSettings();
+  assert.equal(s.cue.maxLineChars,32); assert.equal(s.confidenceThreshold,.7);
+  assert.deepEqual(s.termLists.map(l=>l.name).sort(),['ATM10','Mine']);
+  assert.equal(s.keys.grok,'xai-never-exported-777');
+  store.saveSettings({keys:{grok:'test-only'},cue:{maxLineChars:42,maxLineWords:0},confidenceThreshold:.6,termLists:[]});
+});
+test('OpenAI proofreading is fixed to gpt-6-luna even if another model was saved',async()=>{
+  const { modelFor, proofreaders:p } = await import('./proofreaders.js');
+  assert.equal(modelFor(p.openai,{proofread:{models:{openai:'gpt-6-astra'}}}),'gpt-6-luna');
+  assert.equal(modelFor(p.claude,{proofread:{models:{claude:'claude-haiku-4-5'}}}),'claude-haiku-4-5');
 });

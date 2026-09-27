@@ -49,10 +49,12 @@ export const proofreaders = {
     id: 'openai',
     name: 'OpenAI',
     keyName: 'openai',
-    // Cheapest GPT-6 ($0.10 / $0.50 per 1M tokens); plenty for spotting misheard words.
+    // Fixed to the cheapest GPT-6 ($0.10 / $0.50 per 1M tokens): plenty for spotting misheard
+    // words, and a studio paying for the key never gets a surprise bill from a pricier model.
     defaultModel: 'gpt-6-luna',
-    suggested: [{ id: 'gpt-6-luna', note: 'cheapest' }, { id: 'gpt-6-sol', note: 'smarter, ~20× the price' }],
-    listModels: (key) => listOpenAiStyle('https://api.openai.com/v1/models', key, /^(gpt-|od)/, /(audio|realtime|tts|transcribe|image|search|embedding|moderation|instruct|codex|cyber)/),
+    fixedModel: true,
+    suggested: [{ id: 'gpt-6-luna', note: 'cheapest GPT-6' }],
+    listModels: async () => ['gpt-6-luna'],
     async run({ key, model, system, user, schema, signal }) {
       const data = await request('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -117,7 +119,11 @@ export async function availableModels(id, key) {
 }
 
 export const proofreaderList = () =>
-  Object.values(proofreaders).map(({ id, name, keyName, defaultModel, suggested }) => ({ id, name, keyName, defaultModel, suggested }));
+  Object.values(proofreaders).map(({ id, name, keyName, defaultModel, suggested, fixedModel = false }) => ({ id, name, keyName, defaultModel, suggested, fixedModel }));
+
+// The model a proofread actually uses: the saved choice, unless this proofreader's model is fixed.
+export const modelFor = (proofreader, settings) =>
+  (!proofreader.fixedModel && settings.proofread.models?.[proofreader.id]) || proofreader.defaultModel;
 
 // The chosen proofreader, or the best one we have a key for.
 export function pickProofreader(settings) {

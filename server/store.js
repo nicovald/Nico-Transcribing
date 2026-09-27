@@ -50,7 +50,7 @@ export const DEFAULT_SETTINGS = {
   // AI proofread: provider 'claude' | 'openai' | 'grok' (falls back to whichever has a key).
   proofread: { auto: true, provider: 'claude', models: {} },
   confidenceThreshold: 0.6,
-  cue: { maxLineChars: 42, maxLines: 2, maxDuration: 6, pauseSplit: 0.8, minDuration: 0.8 },
+  cue: { maxLineChars: 42, maxLineWords: 0, maxLines: 2, maxDuration: 6, pauseSplit: 0.8, minDuration: 0.8 },
 };
 
 function readJson(file, fallback) {

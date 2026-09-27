@@ -2,6 +2,13 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.13.0 (2026-09-26)
+- OpenAI proofreading is fixed to **gpt-6-luna** (no pricier models to pick by accident; any other saved OpenAI model is ignored).
+- New subtitle setting: **Max words per line** (0 = no limit), shown in the live preview.
+- Subtitle layout marks the suggested values (confidence slider shows "suggested 60%") and has a **Use suggested** button.
+- Secret setup (Ctrl+Shift+T): a joke terminal intro the first time it opens, confetti on import, and one drop box for the .env file **and** a settings file. **Export my settings** saves subtitle layout, proofreading, term lists, presets, learned fixes and people (never API keys) so a studio can hand out its suggested setup.
+- Removed password-locked setup files (plain .env only).
+
 ## 0.12.0 (2026-09-26)
 - Proofreading model is a dropdown: the default, suggested picks with a price hint, every model your key can use (loaded live from the service), or type any name. OpenAI now defaults to **gpt-6-luna**, the cheapest GPT-6 ($0.10 / $0.50 per 1M tokens).
 - Subtitle layout shows a **live preview**: a sample clip plays on a mock video frame and lists every resulting subtitle with timings and line lengths, updating as you change the settings. The confidence slider underlines sample words too.

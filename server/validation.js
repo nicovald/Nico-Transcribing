@@ -51,10 +51,10 @@ export function validateSettings(patch) {
   if ('confidenceThreshold' in patch && (!Number.isFinite(patch.confidenceThreshold) || patch.confidenceThreshold < 0 || patch.confidenceThreshold > 1)) throw badRequest('Confidence must be between 0 and 1.');
   if ('cue' in patch) {
     object(patch.cue, 'Subtitle settings');
-    const limits = { maxLineChars: [10,120], maxLines: [1,2], maxDuration: [1,20], pauseSplit: [.2,5], minDuration: [0,5] };
+    const limits = { maxLineChars: [10,120], maxLineWords: [0,30], maxLines: [1,2], maxDuration: [1,20], pauseSplit: [.2,5], minDuration: [0,5] };
     for (const [key, value] of Object.entries(patch.cue)) {
       const range = limits[key];
-      if (!range || !Number.isFinite(value) || value < range[0] || value > range[1] || (['maxLineChars','maxLines'].includes(key) && !Number.isInteger(value))) throw badRequest(`Invalid subtitle setting: ${key}`);
+      if (!range || !Number.isFinite(value) || value < range[0] || value > range[1] || (['maxLineChars','maxLineWords','maxLines'].includes(key) && !Number.isInteger(value))) throw badRequest(`Invalid subtitle setting: ${key}`);
     }
   }
   for (const field of ['termLists','presets']) if (field in patch) {

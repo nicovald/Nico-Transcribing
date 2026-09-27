@@ -44,3 +44,13 @@ test('merged SRT sorts by time and prefixes labels', () => {
   const srt = toSrt(cues, { label: (c) => ['Host', 'Guest'][c.track] });
   assert.equal(srt, '1\n00:00:00,000 --> 00:00:01,000\n[Host] first\n\n2\n00:00:02,000 --> 00:00:03,000\n[Guest] second\n');
 });
+
+test('max words per line limits each line, not just characters', async () => {
+  const { buildCues } = await import('./srt.js');
+  const words = 'one two three four five six seven eight nine ten'.split(' ').map((text, i) => ({ text, start: i * 0.3, end: i * 0.3 + 0.25, confidence: null, speaker: null }));
+  const lines = (opts) => buildCues(words, { maxLineChars: 60, maxLines: 1, maxDuration: 20, ...opts }).map((c) => c.text);
+  assert.deepEqual(lines({ maxLineWords: 0 }), ['one two three four five six seven eight nine ten']);
+  assert.deepEqual(lines({ maxLineWords: 4 }), ['one two three four', 'five six seven eight', 'nine ten']);
+  const two = buildCues(words, { maxLineChars: 42, maxLines: 2, maxLineWords: 3, maxDuration: 20 }).map((c) => c.text);
+  assert.deepEqual(two, ['one two three\nfour five six', 'seven eight\nnine ten']);
+});

@@ -9,6 +9,10 @@ import Updates from './Updates.jsx';
 import useUnsaved from './useUnsaved.js';
 
 const editedFields = ({ keys: { github, ...keys }, models, proofread, confidenceThreshold, cue }) => ({ keys, models, proofread, confidenceThreshold, cue });
+// What we recommend; matches the server defaults. "Use suggested" restores these.
+const SUGGESTED_CUE = { maxLineChars: 42, maxLineWords: 0, maxLines: 2, maxDuration: 6, pauseSplit: 0.8, minDuration: 0.8 };
+const SUGGESTED_CONFIDENCE = 0.6;
+const isSuggested = (form) => form.confidenceThreshold === SUGGESTED_CONFIDENCE && Object.entries(SUGGESTED_CUE).every(([k, v]) => (form.cue[k] ?? v) === v);
 const sections = [['services','Transcription'], ['proofread','Proofreading'], ['presets','Presets'], ['terms','Term lists'], ['subtitles','Subtitle layout'], ['updates','App updates']];
 
 const EXTRA_KEYS = [
@@ -36,6 +40,15 @@ function ModelPicker({ proofreader, hasKey, value, onChange }) {
       .catch((err) => setLive({ models: [], error: err.message, loading: false }));
   }, [proofreader?.id, hasKey]);
   if (!proofreader) return null;
+  if (proofreader.fixedModel) {
+    return (
+      <label>
+        Model
+        <select value="" disabled><option value="">{proofreader.defaultModel} ({proofreader.suggested?.[0]?.note || 'fixed'})</option></select>
+        <span className="hint">Fixed to the cheapest model; it's plenty for catching misheard words.</span>
+      </label>
+    );
+  }
   const suggested = proofreader.suggested || [];
   const listed = new Set([proofreader.defaultModel, ...suggested.map((s) => s.id)]);
   const others = live.models.filter((m) => !listed.has(m));
@@ -200,6 +213,11 @@ export default function Settings() {
             <input type="number" min="10" max="120" value={form.cue.maxLineChars} onChange={num('cue.maxLineChars')} />
           </label>
           <label>
+            Max words per line
+            <input type="number" min="0" max="30" value={form.cue.maxLineWords ?? 0} onChange={num('cue.maxLineWords')} />
+            <span className="hint">0 = no limit</span>
+          </label>
+          <label>
             Lines per subtitle
             <select value={form.cue.maxLines} onChange={num('cue.maxLines')}>
               <option value={1}>1</option>
@@ -220,9 +238,18 @@ export default function Settings() {
           </label>
         </div>
         <label>
-          Underline words below {Math.round(form.confidenceThreshold * 100)}% confidence (Deepgram, AssemblyAI, ElevenLabs)
-          <input type="range" min="0.3" max="0.95" step="0.05" value={form.confidenceThreshold} onChange={num('confidenceThreshold')} />
+          <span>
+            Underline words below {Math.round(form.confidenceThreshold * 100)}% confidence (Deepgram, AssemblyAI, ElevenLabs)
+            {form.confidenceThreshold === SUGGESTED_CONFIDENCE && <span className="suggested-tag">suggested</span>}
+          </span>
+          <input type="range" min="0.3" max="0.95" step="0.05" list="confidence-marks" value={form.confidenceThreshold} onChange={num('confidenceThreshold')} />
+          <datalist id="confidence-marks"><option value={SUGGESTED_CONFIDENCE} /></datalist>
+          <span className="slider-marks" aria-hidden="true"><span style={{ left: `${((SUGGESTED_CONFIDENCE - 0.3) / 0.65) * 100}%` }}>suggested 60%</span></span>
         </label>
+        <div className="row">
+          <button type="button" className="soft" disabled={isSuggested(form)} onClick={() => { set('cue', { ...SUGGESTED_CUE }); set('confidenceThreshold', SUGGESTED_CONFIDENCE); }}>Use suggested</button>
+          <span className="muted small">42 characters, 2 lines, up to 6 seconds, new subtitle after a 0.8s pause, 60% confidence.</span>
+        </div>
         <div className="preview-head"><h3>Live preview</h3><span className="muted small">A sample clip, split with the settings above. Changes show instantly; save to use them.</span></div>
         <SubtitlePreview cue={form.cue} threshold={form.confidenceThreshold} />
       </section>

@@ -6,12 +6,16 @@
 const SENTENCE_END = /[.!?…]["')\]]*$/;
 const CLAUSE_END = /[,;:—–-]["')\]]*$/;
 
-function lineSplit(text, maxLineChars, maxLines) {
-  if (maxLines < 2 || text.length <= maxLineChars) return text;
+// A line fits when it is within the character limit and, if set, the word limit (0 = no limit).
+const wordCount = (s) => s.split(' ').filter(Boolean).length;
+const lineFits = (s, maxLineChars, maxLineWords) => s.length <= maxLineChars && (!maxLineWords || wordCount(s) <= maxLineWords);
+
+function lineSplit(text, maxLineChars, maxLines, maxLineWords = 0) {
+  if (maxLines < 2 || lineFits(text, maxLineChars, maxLineWords)) return text;
   // Break at the space closest to the middle so the two lines are balanced,
-  // preferring breaks where both lines fit within maxLineChars.
+  // preferring breaks where both lines fit the limits.
   const mid = text.length / 2;
-  const fits = (i) => i <= maxLineChars && text.length - i - 1 <= maxLineChars;
+  const fits = (i) => lineFits(text.slice(0, i), maxLineChars, maxLineWords) && lineFits(text.slice(i + 1), maxLineChars, maxLineWords);
   let best = -1;
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== ' ') continue;
@@ -20,12 +24,12 @@ function lineSplit(text, maxLineChars, maxLines) {
   return best === -1 ? text : `${text.slice(0, best)}\n${text.slice(best + 1)}`;
 }
 
-// True when text can be wrapped into at most maxLines lines of maxLineChars.
-function fitsLines(text, maxLineChars, maxLines) {
-  if (text.length <= maxLineChars) return true;
+// True when text can be wrapped into at most maxLines lines within the limits.
+function fitsLines(text, maxLineChars, maxLines, maxLineWords = 0) {
+  if (lineFits(text, maxLineChars, maxLineWords)) return true;
   if (maxLines < 2) return false;
   for (let i = 0; i < text.length; i++) {
-    if (text[i] === ' ' && i <= maxLineChars && text.length - i - 1 <= maxLineChars) return true;
+    if (text[i] === ' ' && lineFits(text.slice(0, i), maxLineChars, maxLineWords) && lineFits(text.slice(i + 1), maxLineChars, maxLineWords)) return true;
   }
   return false;
 }
@@ -39,7 +43,7 @@ export function joinWords(words) {
 }
 
 export function buildCues(words, opts, track = 0) {
-  const { maxLineChars = 42, maxLines = 2, maxDuration = 6, pauseSplit = 0.8, minDuration = 0.8 } = opts;
+  const { maxLineChars = 42, maxLineWords = 0, maxLines = 2, maxDuration = 6, pauseSplit = 0.8, minDuration = 0.8 } = opts;
   const maxChars = maxLineChars * maxLines;
   const cues = [];
   let current = [];
@@ -58,7 +62,7 @@ export function buildCues(words, opts, track = 0) {
       const lastText = last.text.trim();
       const curLen = joinWords(current).length;
       if (
-        !fitsLines(nextText, maxLineChars, maxLines) ||
+        !fitsLines(nextText, maxLineChars, maxLines, maxLineWords) ||
         word.end - first.start > maxDuration ||
         word.start - last.end > pauseSplit ||
         (word.speaker != null && last.speaker != null && word.speaker !== last.speaker) ||
@@ -83,7 +87,7 @@ export function buildCues(words, opts, track = 0) {
       track,
       start: round(start),
       end: round(Math.max(end, start + 0.1)),
-      text: lineSplit(joinWords(ws), maxLineChars, maxLines),
+      text: lineSplit(joinWords(ws), maxLineChars, maxLines, maxLineWords),
       words: ws,
       speaker: ws[0].speaker ?? null,
       edited: false,

@@ -2,60 +2,52 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { Icon } from './shared.jsx';
 
-// Hidden on purpose (Ctrl+Shift+T): a studio gives its editors a setup file with the keys it pays for.
-// Plain .env files work; "Make a locked file" turns one into a password-protected file to send around.
+// Hidden on purpose (Ctrl+Shift+T). A studio gives its editors a .env file with the API keys it pays
+// for, and optionally a settings file with its suggested setup. The first open plays a joke intro.
+const INTRO = [
+  'Initializing Nico\'s SUPER SECRET SETUP...',
+  'Scanning fingerprint... that\'s a mouse. Close enough.',
+  'Checking you are not Crainer... probably not.',
+  'Asking SSundee for permission... he said "sure, whatever".',
+  'Teaching the AI to spell Lookum... still working on it.',
+  'Downloading more RAM... 100%',
+  'Hiding Nico\'s credit card... done.',
+];
+const SEEN_KEY = 'secret-setup-intro-seen';
+const introSeen = () => { try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; } };
+const markSeen = () => { try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage unavailable */ } };
+
 export default function TeamSetup({ onClose, onImported }) {
   const dialog = useRef();
   const fileInput = useRef();
-  const [mode, setMode] = useState('import'); // import | lock
+  const [intro, setIntro] = useState(() => !introSeen());
+  const [shown, setShown] = useState(0);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [file, setFile] = useState(null); // { name, text }
-  const [needsPassword, setNeedsPassword] = useState(false);
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [result, setResult] = useState(null);
+  const [results, setResults] = useState([]);
   const [error, setError] = useState(null);
+  const [party, setParty] = useState(0);
   useEffect(() => { dialog.current.showModal(); }, []);
 
-  const reset = (next) => {
-    setMode(next); setFile(null); setNeedsPassword(false); setPassword(''); setConfirm(''); setResult(null); setError(null);
-  };
+  // Intro lines appear one at a time, then ACCESS GRANTED.
+  useEffect(() => {
+    if (!intro || shown > INTRO.length) return;
+    const timer = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 250 : 650);
+    return () => clearTimeout(timer);
+  }, [intro, shown]);
+  const finishIntro = () => { markSeen(); setIntro(false); };
+  const replayIntro = () => { setShown(0); setIntro(true); };
 
-  const importText = async (text, pw) => {
-    setBusy(true); setError(null); setResult(null);
-    try {
-      setResult(await api.post('/api/team-setup', { text, password: pw || undefined }));
-      setNeedsPassword(false); setPassword('');
-      onImported();
-    } catch (err) {
-      // A locked file just asks for its password; a wrong password says so.
-      const locked = err.details?.needsPassword;
-      if (locked) setNeedsPassword(true);
-      setError(locked && !pw ? null : err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const pick = async (f) => {
-    if (!f) return;
-    const picked = { name: f.name, text: await f.text() };
-    setFile(picked); setResult(null); setError(null);
-    if (mode === 'import') importText(picked.text);
-  };
-
-  const lock = async () => {
+  const load = async (file) => {
+    if (!file) return;
     setBusy(true); setError(null);
     try {
-      const locked = await api.post('/api/team-setup/lock', { text: file.text, password });
-      const url = URL.createObjectURL(new Blob([JSON.stringify(locked, null, 2)], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'Team setup (locked).json';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setResult({ locked: true });
+      const r = await api.post('/api/team-setup', { text: await file.text() });
+      setResults((list) => [...list, r.services
+        ? `Keys added for ${r.services.join(', ')}.${r.ignored.length ? ` Skipped: ${r.ignored.join(', ')}.` : ''}`
+        : `Settings imported: ${r.imported.join(', ')}.`]);
+      setParty((n) => n + 1);
+      onImported();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -63,75 +55,83 @@ export default function TeamSetup({ onClose, onImported }) {
     }
   };
 
-  const drop = (
-    <div
-      className={`team-drop ${over ? 'drop-over' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]); }}
-    >
-      <Icon name="upload" size={22} />
-      <strong>{busy ? 'Working…' : file ? file.name : mode === 'import' ? 'Drop your setup file here' : 'Drop the .env file to lock'}</strong>
-      <button disabled={busy} onClick={() => fileInput.current.click()}>{file ? 'Choose another…' : 'Choose file…'}</button>
-      <input ref={fileInput} type="file" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; pick(f); }} />
-    </div>
-  );
-
   return (
     <dialog ref={dialog} className="export-dialog team-dialog" aria-labelledby="team-title" onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }}>
-      <div className="stack">
-        <div className="team-hero">
-          <span className="team-badge"><Icon name="star" size={22} /></span>
-          <div>
-            <h2 id="team-title">Welcome to Nico's SUPER SECRET SETUP!!!</h2>
-            <p className="muted">
-              {mode === 'import'
-                ? 'Drop the setup file you were given. The API keys are saved on this computer, locked to your Windows account, and never shown again.'
-                : 'Turn a .env file into a password-locked setup file. Send the file one way and tell people the password another way.'}
-            </p>
+      {intro ? (
+        <div className="stack">
+          <div className="terminal" role="status" aria-live="polite">
+            {INTRO.slice(0, shown).map((line, i) => <div key={i}><span className="prompt">&gt;</span> {line}</div>)}
+            {shown > INTRO.length && <div className="granted">ACCESS GRANTED</div>}
+            {shown <= INTRO.length && <span className="cursor" />}
+          </div>
+          <div className="row">
+            <span className="grow" />
+            {shown > INTRO.length ? <button className="primary" autoFocus onClick={finishIntro}>Let me in</button> : <button className="ghost" onClick={finishIntro}>Skip</button>}
           </div>
         </div>
-
-        {drop}
-
-        {mode === 'import' && needsPassword && !result && (
-          <form className="row" onSubmit={(e) => { e.preventDefault(); importText(file.text, password); }}>
-            <input className="grow" type="password" autoFocus aria-label="Setup file password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button className="primary" disabled={busy || !password}>Unlock</button>
-          </form>
-        )}
-
-        {mode === 'lock' && file && !result && (
-          <form className="stack-tight" onSubmit={(e) => { e.preventDefault(); lock(); }}>
-            <input type="password" autoFocus aria-label="New password" placeholder="Password (8+ characters)" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <input type="password" aria-label="Repeat password" placeholder="Repeat password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-            {confirm && confirm !== password && <span className="warn-text small">The passwords don't match yet.</span>}
-            <button className="primary" disabled={busy || password.length < 8 || confirm !== password}>Save locked file</button>
-          </form>
-        )}
-
-        {result?.services && (
-          <div className="saved team-result">
-            <Icon name="check" />
-            <span>Keys added for {result.services.join(', ')}. You can delete the file now.{result.ignored.length > 0 && ` Skipped: ${result.ignored.join(', ')}.`}</span>
+      ) : (
+        <div className="stack">
+          {party > 0 && <Confetti key={party} />}
+          <div className="team-hero">
+            <span className="team-badge"><Icon name="star" size={22} /></span>
+            <div>
+              <h2 id="team-title">Welcome to Nico's SUPER SECRET SETUP!!!</h2>
+              <p className="muted">Drop the <strong>.env</strong> file with your API keys, and the <strong>settings file</strong> if you were given one. Keys are saved on this computer, locked to your Windows account, and never shown again.</p>
+            </div>
           </div>
-        )}
-        {result?.locked && (
-          <div className="saved team-result">
-            <Icon name="check" />
-            <span>Locked file saved. Send it to your team, and share the password separately.</span>
+          <div
+            className={`team-drop ${over ? 'drop-over' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => { e.preventDefault(); setOver(false); [...e.dataTransfer.files].reduce((p, f) => p.then(() => load(f)), Promise.resolve()); }}
+          >
+            <Icon name="upload" size={22} />
+            <strong>{busy ? 'Importing…' : 'Drop files here'}</strong>
+            <button disabled={busy} onClick={() => fileInput.current.click()}>Choose files…</button>
+            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const files = [...e.target.files]; e.target.value = ''; files.reduce((p, f) => p.then(() => load(f)), Promise.resolve()); }} />
           </div>
-        )}
-        {error && <div className="error" role="alert">{error}</div>}
-
-        <div className="row">
-          <button className="link-btn subtle" disabled={busy} onClick={() => reset(mode === 'import' ? 'lock' : 'import')}>
-            {mode === 'import' ? 'Make a locked file' : 'Back to import'}
-          </button>
-          <span className="grow" />
-          <button className={result ? 'primary' : ''} disabled={busy} onClick={onClose}>{result ? 'Done' : 'Cancel'}</button>
+          {results.length > 0 && (
+            <div className="saved team-result">
+              <Icon name="check" />
+              <span>{results.join(' ')} You're in. Welcome to the team, legend. You can delete the files now.</span>
+            </div>
+          )}
+          {error && <div className="error" role="alert">{error}</div>}
+          <div className="row wrap">
+            <a className="button ghost-link" href="/api/team-setup/settings-export" download title="Subtitle layout, proofreading, term lists, presets, learned fixes and people. Never API keys.">
+              <Icon name="download" /> Export my settings
+            </a>
+            <button className="link-btn subtle" onClick={replayIntro}>Replay intro</button>
+            <span className="grow" />
+            <button className={results.length ? 'primary' : ''} disabled={busy} onClick={onClose}>{results.length ? 'Done' : 'Close'}</button>
+          </div>
         </div>
-      </div>
+      )}
     </dialog>
+  );
+}
+
+// A quick burst of confetti in the app's colors.
+const COLORS = ['#126ce0', '#ffb020', '#7b61ff', '#ff7a45', '#1fbf7a', '#ff5fa2', '#2bb3ff'];
+function Confetti() {
+  const pieces = useRef(Array.from({ length: 48 }, (_, i) => ({
+    left: Math.random() * 100,
+    delay: Math.random() * 0.3,
+    duration: 1.2 + Math.random() * 0.9,
+    drift: (Math.random() - 0.5) * 160,
+    spin: (Math.random() - 0.5) * 900,
+    color: COLORS[i % COLORS.length],
+    round: i % 3 === 0,
+  }))).current;
+  return (
+    <div className="confetti" aria-hidden="true">
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          className={p.round ? 'round' : ''}
+          style={{ left: `${p.left}%`, background: p.color, animationDelay: `${p.delay}s`, animationDuration: `${p.duration}s`, '--drift': `${p.drift}px`, '--spin': `${p.spin}deg` }}
+        />
+      ))}
+    </div>
   );
 }
