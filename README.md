@@ -1,4 +1,6 @@
-# Grok Transcriber
+# Nico's Transcriber
+
+_Formerly "Nico's Transcriber"._
 
 Windows desktop app that turns the audio tracks of videos into timestamped **.srt subtitles** with AI speech-to-text, then helps you catch the words it got wrong. Built for editors working with multi-track, multicam gaming recordings.
 
@@ -21,7 +23,7 @@ Current version and release history: see [CHANGELOG.md](CHANGELOG.md).
 
 ## For editors
 
-1. Download **`Grok-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases) (or get it from Nico) and run it. It installs and adds a desktop shortcut.
+1. Download **`Nicos-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases) (or get it from Nico) and run it. It installs and adds a desktop shortcut.
 2. Open **Settings → Transcription**: expand one service, paste the API key you were given, and click **Save settings** (Ctrl+S). Other services are optional. A saved key is first validated by the service when you transcribe. Add a GitHub token under **App updates** (see below) for updates.
 3. Pick a **preset** above the drop zone (or none), then drag videos onto the window. Check the track names, language and term lists, hit **Transcribe**.
 4. When it's done, click **Needs a look**, fix or edit what's wrong, then **Save next to the videos**. Review the export preview and click **Export files**. Misclicked in the transcript? **Undo** or Ctrl+Z. AI checks run in the background and may take longer on large transcripts.
@@ -64,7 +66,7 @@ npm run release   # builds the installer, then uploads it + latest.yml to a GitH
 | OpenAI | `gpt-5.6` | Same OpenAI key as above. Change the model in Settings if needed. |
 | Grok | `grok-4.7` | Same xAI key as above. |
 
-Models are editable in Settings. In the desktop app, API keys and the GitHub update token are encrypted in `%APPDATA%\Grok Transcriber\data\settings.json` using Windows account protection; old plaintext keys migrate at startup. The settings backup is also protected. The UI receives only masked values. Audio goes to the selected transcription service, and transcript text goes to enabled proofreaders/verifiers. Browser/Docker mode stores keys in plaintext on its host.
+Models are editable in Settings. In the desktop app, API keys and the GitHub update token are encrypted in `%APPDATA%\Nico's Transcriber\data\settings.json` (installs from before the rename keep `%APPDATA%\Nico's Transcriber`) using Windows account protection; old plaintext keys migrate at startup. The settings backup is also protected. The UI receives only masked values. Audio goes to the selected transcription service, and transcript text goes to enabled proofreaders/verifiers. Browser/Docker mode stores keys in plaintext on its host.
 
 Back up the installed app's `data` folder while the app is closed. Projects, extracted audio and transcripts are local. Protected keys require the Windows account that saved them; do not use a copied settings file to distribute credentials to other employees. Moving projects to another Windows account requires entering keys there again.
 
@@ -92,7 +94,7 @@ npm run app      # build UI + launch the desktop app (uses ./data)
 npm run dev      # browser mode: API on :3462 (node --watch) + Vite on :5173
 npm test         # cue builder + suggestion/compare tests
 node scripts/desktop-smoke.mjs  # after build: isolated Electron interaction checks + screenshots
-npm run dist     # Windows installer → release/Grok-Transcriber-Setup-<version>.exe (no upload)
+npm run dist     # Windows installer → release/Nicos-Transcriber-Setup-<version>.exe (no upload)
 npm run release  # same, then publishes it as a GitHub release (needs gh auth)
 npm run icon     # rebuild electron/icon.ico from electron/icon.png (after changing the icon)
 ```
@@ -101,7 +103,7 @@ npm run icon     # rebuild electron/icon.ico from electron/icon.png (after chang
 
 Env vars: `DATA_DIR`, `PORT` (3462, browser mode), `HOST` (127.0.0.1), `OPEN_BROWSER=1`, `FFMPEG_PATH`, `FFPROBE_PATH`. Electron smoke test: `SCREENSHOT=out.png SCREENSHOT_HASH='#/settings' npx electron .` renders offscreen, captures the window and exits. Optional `SCREENSHOT_JS` (runs in the page first and writes its result to `<screenshot>.json`), `SCREENSHOT_WIDTH`, `SCREENSHOT_DELAY`. Each screenshot folder has an isolated `.electron-profile`, so tests can run beside an open app and never install updates. In Git Bash prefix with `MSYS_NO_PATHCONV=1`.
 
-`node scripts/desktop-smoke.mjs` generates disposable synthetic audio and fake keys under `data/desktop-smoke/`, exercises saving, failed edits, undo, batch fixes, pagination and exports, verifies Windows key protection, and captures Settings, Project, Review and Export. It needs normal Windows account permissions for DPAPI. It makes no paid provider calls. Pass `"release/win-unpacked/Grok Transcriber.exe"` as its first argument to check the packaged app. `npm test` includes HTTP failure cases, cancellation, timing, chunk reuse, atomic recovery and session isolation.
+`node scripts/desktop-smoke.mjs` generates disposable synthetic audio and fake keys under `data/desktop-smoke/`, exercises saving, failed edits, undo, batch fixes, pagination and exports, verifies Windows key protection, and captures Settings, Project, Review and Export. It needs normal Windows account permissions for DPAPI. It makes no paid provider calls. Pass `"release/win-unpacked/Nico's Transcriber.exe"` as its first argument to check the packaged app. `npm test` includes HTTP failure cases, cancellation, timing, chunk reuse, atomic recovery and session isolation.
 
 ### Browser / Docker mode (optional)
 

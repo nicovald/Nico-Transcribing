@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.14.0 (2026-09-26)
+- Renamed to **Nico's Transcriber** (window, installer, shortcuts). Updating keeps everything: installs from before the rename keep their data folder (`%APPDATA%\Grok Transcriber`) so projects, learned fixes and saved API keys carry over, and the old desktop shortcut is removed. Files exported from older versions still import.
+
 ## 0.13.0 (2026-09-26)
 - OpenAI proofreading is fixed to **gpt-6-luna** (no pricier models to pick by accident; any other saved OpenAI model is ignored).
 - New subtitle setting: **Max words per line** (0 = no limit), shown in the live preview.

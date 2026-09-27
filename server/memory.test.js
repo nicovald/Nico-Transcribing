@@ -76,5 +76,5 @@ test('importing a teammate file merges without double counting', () => {
   const m = memory.getMemory();
   assert.deepEqual(m.people.find((p) => p.name === 'Crainer').aka, ['Benjamin', 'Ben']);
   assert.equal(m.fixes.find((f) => f.from === 'couples stone').fixed, 10);
-  assert.throws(() => memory.importMemory({ people: [] }), /not a Grok Transcriber memory file/);
+  assert.throws(() => memory.importMemory({ people: [] }), /not a memory file exported/);
 });

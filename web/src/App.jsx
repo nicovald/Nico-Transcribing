@@ -133,7 +133,7 @@ export default function App() {
       <div className="app">
         <aside className="sidebar">
           <a className="brand" href="#/">
-            <Logo /> Grok Transcriber
+            <Logo /> Nico's Transcriber
           </a>
           <nav>
             <a className={`nav-projects ${section === 'home' || section === 'projects' || section === 'jobs' ? 'active' : ''}`} href="#/" title="Projects">
@@ -210,7 +210,7 @@ export default function App() {
           )}
         </main>
 
-        <footer>Grok Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
+        <footer>Nico's Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
         {teamSetup && <TeamSetup onClose={() => setTeamSetup(false)} onImported={loadSettings} />}
         </div>
       </div>

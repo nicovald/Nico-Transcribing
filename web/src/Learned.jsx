@@ -90,7 +90,7 @@ export default function Learned({ active }) {
     setMessage(null);
     await run(async () => {
       let data;
-      try { data = JSON.parse(await file.text()); } catch { throw new Error('That file is not a memory file exported from Grok Transcriber.'); }
+      try { data = JSON.parse(await file.text()); } catch { throw new Error('That file is not a memory file exported from Nico\'s Transcriber.'); }
       const r = await api.post('/api/memory/import', data);
       setFixes(r.memory.fixes);
       const draft = toDraft(r.memory.people);

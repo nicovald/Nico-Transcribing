@@ -156,12 +156,13 @@ export function deleteFix(id) {
   return memoryView(save(memory));
 }
 
+// "grok-transcriber-*" file kinds predate the rename; kept so older exported files still import.
 export const exportMemory = () => ({ kind: 'grok-transcriber-memory', version: 1, exportedAt: new Date().toISOString(), ...getMemory() });
 
 // Merging a teammate's file: people join by name, fixes by from/to. Counts take the larger side,
 // so importing the same file twice changes nothing. Your own pins win.
 export function importMemory(data) {
-  if (!data || data.kind !== 'grok-transcriber-memory') throw badRequest('This is not a Grok Transcriber memory file.');
+  if (!data || data.kind !== 'grok-transcriber-memory') throw badRequest("This is not a memory file exported from Nico's Transcriber.");
   const memory = getMemory();
   let people = 0, fixes = 0;
   for (const raw of Array.isArray(data.people) ? data.people : []) {

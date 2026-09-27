@@ -71,7 +71,7 @@ export const isSettingsFile = (data) => data?.kind === KIND;
 // Layout and proofreading are replaced; term lists and presets are merged (same id replaced,
 // new ones added, the editor's own kept); learned fixes and people merge like a memory import.
 export function importTeamSettings(data) {
-  if (!isSettingsFile(data) || !data.settings || typeof data.settings !== 'object') throw badRequest('This is not a settings file exported from Grok Transcriber.');
+  if (!isSettingsFile(data) || !data.settings || typeof data.settings !== 'object') throw badRequest('This is not a settings file exported from Nico\'s Transcriber.');
   const incoming = data.settings;
   const current = store.getSettings();
   const merge = (mine, theirs) => {

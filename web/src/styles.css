@@ -557,3 +557,4 @@ button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
 .confetti span { position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 2px; animation: confetti-fall ease-in forwards; }
 .confetti span.round { width: 10px; height: 10px; border-radius: 50%; }
 @keyframes confetti-fall { to { transform: translate(var(--drift), 640px) rotate(var(--spin)); opacity: 0.2; } }
+.sidebar .brand { font-size: 18.5px; white-space: nowrap; }

@@ -92,7 +92,7 @@ export function getSettings() {
   const saved = readJson(SETTINGS_FILE, {});
   if (saved.keys) saved.keys = Object.fromEntries(Object.entries(saved.keys).map(([id,key]) => {
     if (!key.startsWith(SECRET_PREFIX)) return [id,key];
-    if (!secrets) throw new Error('These API keys are protected by the desktop app. Open Grok Transcriber with the Windows account that saved them.');
+    if (!secrets) throw new Error('These API keys are protected by the desktop app. Open Nico\'s Transcriber with the Windows account that saved them.');
     try { return [id,secrets.decrypt(key.slice(SECRET_PREFIX.length))]; }
     catch { throw new Error('Windows could not unlock the saved API keys. Use the Windows account that saved them, or ask your administrator to reset settings.json.'); }
   }));

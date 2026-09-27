@@ -68,7 +68,7 @@ export default function TermLists() {
       if (data?.kind !== FILE_KIND || typeof data.terms !== 'string') throw new Error();
       add({ name: String(data.name || 'Imported list'), terms: data.terms, glossary: typeof data.glossary === 'string' ? data.glossary : '' });
     } catch {
-      setStatus('That file is not a term list exported from Grok Transcriber. To add names from any .txt/.csv/.json, drop it on a list\'s "All terms" box.');
+      setStatus('That file is not a term list exported from Nico\'s Transcriber. To add names from any .txt/.csv/.json, drop it on a list\'s "All terms" box.');
     }
   };
   const update = (id, patch) => setLists((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));

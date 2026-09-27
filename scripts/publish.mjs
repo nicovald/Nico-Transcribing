@@ -7,7 +7,7 @@ import fs from 'node:fs';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const { owner, repo } = pkg.build.publish[0];
 const tag = `v${pkg.version}`;
-const exe = `release/Grok-Transcriber-Setup-${pkg.version}.exe`;
+const exe = `release/${pkg.build.artifactName.replace('${version}', pkg.version).replace('${ext}', 'exe')}`;
 const files = [exe, `${exe}.blockmap`, 'release/latest.yml'];
 
 for (const f of files) if (!fs.existsSync(f)) throw new Error(`Missing ${f}. Did the build run?`);

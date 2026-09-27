@@ -44,7 +44,7 @@ export const app = express();
 let desktopToken = null;
 export const configureDesktop = token => { desktopToken = token; };
 app.use('/api', (req,res,next) => {
-  if (req.headers['sec-fetch-site'] === 'cross-site') return res.status(403).json({ error: 'Open this action inside Grok Transcriber.' });
+  if (req.headers['sec-fetch-site'] === 'cross-site') return res.status(403).json({ error: "Open this action inside Nico's Transcriber." });
   if (desktopToken && !String(req.headers.cookie || '').split(';').some(c => c.trim() === `desktop-session=${desktopToken}`)) return res.status(403).json({ error: 'This request is outside the desktop session.' });
   const devOrigin = !desktopToken && process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1):5173$/.test(req.headers.origin || '');
   if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && !devOrigin) return res.status(403).json({error:'This request came from another app.'});
@@ -108,7 +108,7 @@ app.post('/api/memory/fixes', (req, res) => res.json(memory.addFix(object(req.bo
 app.patch('/api/memory/fixes/:id', (req, res) => res.json(memory.updateFix(req.params.id, object(req.body))));
 app.delete('/api/memory/fixes/:id', (req, res) => res.json(memory.deleteFix(req.params.id)));
 app.get('/api/memory/export', (req, res) => {
-  res.setHeader('Content-Disposition', `attachment; filename="Grok Transcriber memory ${new Date().toISOString().slice(0, 10)}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="Nico's Transcriber memory ${new Date().toISOString().slice(0, 10)}.json"`);
   res.json(memory.exportMemory());
 });
 app.post('/api/memory/import', (req, res) => res.json(memory.importMemory(req.body)));
@@ -126,7 +126,7 @@ app.post('/api/team-setup', (req, res) => {
   res.json({ services, ignored });
 });
 app.get('/api/team-setup/settings-export', (req, res) => {
-  res.setHeader('Content-Disposition', `attachment; filename="Grok Transcriber settings ${new Date().toISOString().slice(0, 10)}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="Nico's Transcriber settings ${new Date().toISOString().slice(0, 10)}.json"`);
   res.json(exportTeamSettings());
 });
 
@@ -587,7 +587,7 @@ export function startServer({ port = Number(process.env.PORT) || 3462, host = pr
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const port = await startServer();
   const url = `http://localhost:${port}`;
-  console.log(`Grok Transcriber v${pkg.version} running at ${url}`);
+  console.log(`Nico's Transcriber v${pkg.version} running at ${url}`);
   if (process.env.OPEN_BROWSER === '1') {
     const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`;
     exec(cmd);

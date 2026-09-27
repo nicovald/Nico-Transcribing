@@ -1,4 +1,6 @@
-# Grok Transcriber
+# Nico's Transcriber
+
+(Formerly "Grok Transcriber". Existing installs keep `%APPDATA%\Grok Transcriber`; exported file kinds stay `grok-transcriber-*`; appId unchanged.)
 
 Windows desktop app (Electron) for editors: import multi-track/multicam videos into projects, transcribe each audio track with a pluggable STT provider, catch misheard words (term lists, AI proofread, cross-provider compare, optional Jev verification), export SRTs next to the videos.
 

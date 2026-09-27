@@ -11,13 +11,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Screenshot smoke tests get their own profile so they can run next to a real window.
 if (process.env.SCREENSHOT) app.setPath('userData', path.join(path.dirname(path.resolve(process.env.SCREENSHOT)), '.electron-profile'));
 
+// The app was called "Grok Transcriber" before v0.14. Installs from then keep their folder: it holds
+// the projects and the Windows key that unlocks the saved API keys, so moving it would lose them.
+const legacyUserData = path.join(app.getPath('appData'), 'Grok Transcriber');
+if (app.isPackaged && !process.env.SCREENSHOT && fs.existsSync(legacyUserData)) app.setPath('userData', legacyUserData);
+
 // Only one copy of the app at a time; a second launch focuses the first window.
 if (!app.requestSingleInstanceLock()) {
-  console.log('Grok Transcriber is already running; focusing that window instead.');
+  console.log("Nico's Transcriber is already running; focusing that window instead.");
   app.exit(0);
 }
 
-// Packaged: keep data in %APPDATA%/Grok Transcriber. Dev (npm run app): use the repo's ./data.
+// Packaged: keep data in %APPDATA%/Nico's Transcriber (or the legacy folder above). Dev (npm run app): use the repo's ./data.
 process.env.DATA_DIR ??= app.isPackaged ? path.join(app.getPath('userData'), 'data') : path.join(here, '..', 'data');
 
 // Screenshot smoke tests run without a GPU.
@@ -54,7 +59,7 @@ ipcMain.handle('open-external', (e, url) => {
 
 async function createWindow() {
   const { getSettings, configureSecrets } = await import('../server/store.js');
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows key protection is unavailable. Sign into Windows again and restart Grok Transcriber.');
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows key protection is unavailable. Sign into Windows again and restart Nico\'s Transcriber.');
   configureSecrets({
     encrypt: text => safeStorage.encryptString(text).toString('base64'),
     decrypt: text => safeStorage.decryptString(Buffer.from(text, 'base64')),
@@ -70,7 +75,7 @@ async function createWindow() {
       const count = work.jobs + work.imports + work.checks;
       if (!process.env.SCREENSHOT && (count || dirty.size)) {
         const result = await dialog.showMessageBox(win, {
-          type: 'warning', title: 'Close Grok Transcriber?',
+          type: 'warning', title: "Close Nico's Transcriber?",
           message: count ? 'Work is still in progress.' : 'You have unsaved changes.',
           detail: `${count ? 'Closing stops active imports, transcriptions and checks. Completed transcription chunks are kept for retry. ' : ''}${dirty.size ? 'Unsaved edits will be lost. ' : ''}Keep the app open to finish.`,
           buttons: ['Keep working', 'Stop and close'], defaultId: 0, cancelId: 0,
@@ -98,7 +103,7 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 650,
     show: !process.env.SCREENSHOT,
-    title: 'Grok Transcriber',
+    title: "Nico's Transcriber",
     backgroundColor: '#f3f8fc',
     autoHideMenuBar: true,
     icon: path.join(here, 'icon.png'),
@@ -175,7 +180,7 @@ app.on('second-instance', () => {
 app.whenReady().then(createWindow).catch((err) => {
   console.error(err);
   if (process.env.SCREENSHOT) { app.exit(1); return; }
-  dialog.showErrorBox('Grok Transcriber failed to start', String(err?.stack || err));
+  dialog.showErrorBox("Nico's Transcriber failed to start", String(err?.stack || err));
   app.quit();
 });
 

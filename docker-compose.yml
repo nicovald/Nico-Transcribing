@@ -1,7 +1,7 @@
 services:
-  grok-transcriber:
+  nicos-transcriber:
     build: .
-    container_name: grok-transcriber
+    container_name: nicos-transcriber
     restart: unless-stopped
     ports:
       - "3462:3462"
