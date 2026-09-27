@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.15.0 (2026-09-26)
+- **Build with AI** on Term lists: type the game or modpack, copy a ready-made prompt into ChatGPT, Claude, Grok or any AI, paste its answer back, and the list is created (priority terms + full glossary). The answer can be pasted as-is, code fences and all; **Import list** also accepts a file saved from an AI's answer.
+
 ## 0.14.0 (2026-09-26)
 - Renamed to **Nico's Transcriber** (window, installer, shortcuts). Updating keeps everything: installs from before the rename keep their data folder (`%APPDATA%\Grok Transcriber`) so projects, learned fixes and saved API keys carry over, and the old desktop shortcut is removed. Files exported from older versions still import.
 

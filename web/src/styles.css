@@ -558,3 +558,9 @@ button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
 .confetti span.round { width: 10px; height: 10px; border-radius: 50%; }
 @keyframes confetti-fall { to { transform: translate(var(--drift), 640px) rotate(var(--spin)); opacity: 0.2; } }
 .sidebar .brand { font-size: 18.5px; white-space: nowrap; }
+
+/* Build a term list with AI. */
+.ai-dialog { width: min(760px, 92vw); }
+.ai-step { display: flex; gap: 14px; align-items: flex-start; }
+.step-num { width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font: 800 15px var(--display); color: #fff; background: var(--grape); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15); margin-top: 22px; }
+.ai-prompt { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--text-2); background: var(--surface-2); }

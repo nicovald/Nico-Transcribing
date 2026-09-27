@@ -3,6 +3,8 @@ import { api } from './api.js';
 import { useApp } from './App.jsx';
 import { Icon } from './shared.jsx';
 import useUnsaved from './useUnsaved.js';
+import AiTermListDialog from './AiTermListDialog.jsx';
+import { parseTermListAnswer } from '../../server/aiTermList.js';
 
 const count = (text, sep) => String(text || '').split(sep).filter((t) => t.trim()).length;
 const priorityCount = (l) => count(l.terms, /[\n,]/);
@@ -34,6 +36,7 @@ export default function TermLists() {
   const timer = useRef();
   const first = useRef(true);
   const importInput = useRef();
+  const [aiOpen, setAiOpen] = useState(false);
   const [open, setOpen] = useState(readOpen);
   const toggle = (id) => setOpen((ids) => { const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]; writeOpen(next); return next; });
 
@@ -64,9 +67,11 @@ export default function TermLists() {
   const importList = async (file) => {
     setStatus(null);
     try {
-      const data = JSON.parse(await file.text());
-      if (data?.kind !== FILE_KIND || typeof data.terms !== 'string') throw new Error();
-      add({ name: String(data.name || 'Imported list'), terms: data.terms, glossary: typeof data.glossary === 'string' ? data.glossary : '' });
+      const text = await file.text();
+      const data = JSON.parse(text);
+      // Our own export, as saved; anything else (e.g. a file saved from an AI's answer) goes through the forgiving parser.
+      if (data?.kind === FILE_KIND && typeof data.terms === 'string') add({ name: String(data.name || 'Imported list'), terms: data.terms, glossary: typeof data.glossary === 'string' ? data.glossary : '' });
+      else add(parseTermListAnswer(text, file.name.replace(/.[^.]+$/, '')));
     } catch {
       setStatus('That file is not a term list exported from Nico\'s Transcriber. To add names from any .txt/.csv/.json, drop it on a list\'s "All terms" box.');
     }
@@ -100,6 +105,7 @@ export default function TermLists() {
       <div className="row wrap">
         <h2 className="grow">Term lists</h2>
         <span className="muted small">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : ''}</span>
+        <button type="button" onClick={() => setAiOpen(true)}><Icon name="star" /> Build with AI</button>
         <button type="button" onClick={() => importInput.current.click()}><Icon name="upload" /> Import list</button>
         <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importList(f); }} />
         <button type="button" onClick={addMinecraft} disabled={loadingMc}>{loadingMc ? 'Downloading…' : <><Icon name="download" /> Vanilla Minecraft list</>}</button>
@@ -110,7 +116,8 @@ export default function TermLists() {
         One list per game or modpack. Tick lists when you transcribe. <strong>Priority terms</strong> (up to ~100) are sent to the transcriber so it spells them right.{' '}
         <strong>All terms</strong> can be thousands of names (every item, mob, mod…). They're used afterwards to catch sound-alike mistakes and by the AI proofread.
       </p>
-      {!lists.length && <p className="muted small">No lists yet.</p>}
+      {aiOpen && <AiTermListDialog onClose={() => setAiOpen(false)} onCreate={(list) => add(list)} />}
+      {!lists.length && <p className="muted small">No lists yet. <button type="button" className="link-btn" onClick={() => setAiOpen(true)}>Build one with AI</button> for any game in a couple of minutes.</p>}
       {lists.map((l) => (
         <div key={l.id} className={`term-list ${open.includes(l.id) ? 'open' : 'closed'}`}>
           <div className="row">
