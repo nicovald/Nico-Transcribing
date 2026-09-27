@@ -4,3 +4,11 @@ data
 .git
 *.log
 *.bat
+release
+vendor
+build
+docs/screenshots
+.env
+.env.*
+*.env
+logs

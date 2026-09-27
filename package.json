@@ -1,7 +1,7 @@
 {
   "name": "nicos-transcriber",
   "productName": "Nico's Transcriber",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Local app that turns multi-track video audio into timestamped SRT subtitles using Grok, OpenAI, Deepgram, AssemblyAI or ElevenLabs.",
   "type": "module",
   "private": true,
@@ -9,10 +9,14 @@
     "dev": "concurrently -n server,web -c blue,magenta \"node --watch server/index.js\" \"vite\"",
     "app": "vite build && electron .",
     "build": "vite build",
-    "dist": "vite build && electron-builder --win",
+    "postinstall": "node scripts/install-media-tools.mjs",
+    "media:install": "node scripts/install-media-tools.mjs",
+    "legal": "node scripts/prepare-legal.mjs",
+    "dist": "npm run media:install && npm run legal && vite build && electron-builder --win --publish never",
     "start": "node server/index.js",
-    "test": "node --test server/*.test.js",
-    "release": "vite build && electron-builder --win --publish never && node scripts/publish.mjs",
+    "test": "node --test server/*.test.js scripts/*.test.mjs",
+    "release:check": "node scripts/publish.mjs --check",
+    "release": "node scripts/publish.mjs",
     "icon": "node scripts/make-icon.mjs"
   },
   "engines": {
@@ -23,8 +27,6 @@
     "busboy": "^1.6.0",
     "electron-updater": "^6.8.9",
     "express": "^5.1.0",
-    "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0",
     "undici": "^8.11.2"
   },
   "devDependencies": {
@@ -54,11 +56,12 @@
       "!server/**/*.test.js",
       "dist/**",
       "package.json",
-      "!node_modules/ffprobe-static/bin/{darwin,linux}/**"
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
     ],
-    "asarUnpack": [
-      "node_modules/ffmpeg-static/**",
-      "node_modules/ffprobe-static/**"
+    "extraResources": [
+      { "from": "vendor/ffmpeg", "to": "media-tools" },
+      { "from": "build/legal", "to": "licenses" }
     ],
     "win": {
       "target": [

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import ffmpeg from 'ffmpeg-static';
+import { FFMPEG as ffmpeg } from './media-tools.js';
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(),'transcriber-test-'));
 process.env.DATA_DIR = path.join(temp,'data');

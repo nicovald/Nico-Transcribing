@@ -2,6 +2,12 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.17.1 (2026-09-27)
+- Updated the bundled FFmpeg and ffprobe tools to a matching **9.0.2** build. Downloads are pinned and checked with SHA-256; Docker uses its system media tools.
+- Added downloadable open-source notices in Settings, bundled dependency and font licenses, media-tool provenance, and the matching FFmpeg core source as a release asset.
+- Releases now require a clean, pushed commit, matching versions, passing tests and a packaged desktop smoke check. Uploads remain drafts until GitHub asset checksums are verified.
+- Added release checksums, readable release notes, a screenshot tour, and Windows/Linux CI checks. Repository visibility is unchanged.
+
 ## 0.17.0 (2026-09-27)
 - **Our own title bar**: the generic Windows bar is gone. The app runs to the top edge, the minimize/maximize/close buttons sit on the app's canvas color (snap layouts still work), and the scrollbar matches the app. Drag the top strip or the sidebar's top edge to move the window.
 

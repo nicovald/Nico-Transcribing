@@ -4,6 +4,18 @@ Free Windows desktop app that turns the audio tracks of videos into timestamped 
 
 You bring your own API key for a speech-to-text service (Grok, Deepgram, AssemblyAI, ElevenLabs or OpenAI) and pay that service directly; the app itself is free and [MIT licensed](LICENSE).
 
+[**Download for Windows**](https://github.com/nicovald/Video-Transcribing/releases/latest) · [Getting started](#getting-started) · [Release history](CHANGELOG.md) · [Report an issue](https://github.com/nicovald/Video-Transcribing/issues)
+
+**Windows 10/11, 64-bit.** No Node.js or separate FFmpeg installation is needed for the desktop installer. Internet access and a funded transcription-service API key are required to transcribe.
+
+**Private preview:** downloads currently require GitHub repository access. Once the repository is public, the same download link and token-free updates will work for everyone.
+
+![Reviewing a multi-track transcript, with suggested fixes and per-speaker labels](docs/screenshots/review.png)
+
+*Review suggestions, keep control of every correction, and export subtitles for your editor. Screenshots use synthetic demo data.*
+
+## What it does
+
 - **Presets** per series or recording setup ("Minecraft vanilla", "ATM10 To The Sky"): description, term lists, player names, language, provider and track layout ("Track 1 = host mic, Track 3 = game audio, skip"). Pick one before dropping videos and the project comes pre-filled; create them from any project with **Save as new preset**.
 - **Projects**: drop one or more videos (multicam) and rename the project and each video for your own tracking. Your actual files are never renamed or moved.
 - Every audio track is pulled out automatically. Name them ("Host mic", "Game audio") and tick the ones to transcribe.
@@ -23,12 +35,14 @@ Current version and release history: see [CHANGELOG.md](CHANGELOG.md).
 
 ## Getting started
 
-1. Download **`Nicos-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases) and run it. It installs and adds a desktop shortcut. The installer isn't code-signed, so Windows may show "Windows protected your PC": click **More info → Run anyway**.
+1. Download **`Nicos-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases/latest) and run it. It installs for your Windows account and adds a desktop shortcut. The installer isn't code-signed, so Windows may show "Windows protected your PC". If you trust this download, choose **More info → Run anyway**. Release assets include `SHA256SUMS.txt` for verification.
 2. Open **Settings → Transcription**: expand one service, paste your API key (each service has a **Get a key** link), and click **Save settings** (Ctrl+S). Other services are optional. A saved key is first validated by the service when you transcribe.
 3. Pick a **preset** above the drop zone (or none), then drag videos onto the window. Check the track names, language and term lists, hit **Transcribe**.
 4. When it's done, click **Needs a look**, fix or edit what's wrong, then **Save next to the videos**. Review the export preview and click **Export files**. Misclicked in the transcript? **Undo** or Ctrl+Z. AI checks run in the background and may take longer on large transcripts.
 
 You can switch pages while things are running; nothing stops.
+
+![Project library with a video drop zone and a completed example project](docs/screenshots/projects.png)
 
 Track selections, labels, language and transcription options save automatically with each project. Editing or deleting a preset does not change projects that already use it. When some tracks fail, the transcript shows **Partly complete**; completed tracks remain editable and exportable. **Retry failed tracks** reuses completed audio chunks when the transcription settings are unchanged.
 
@@ -42,13 +56,16 @@ Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Ent
 
 ## Updates
 
-The installed app updates itself from the public GitHub Releases of `nicovald/Video-Transcribing`: it checks on start and every 4 hours, downloads in the background, then shows **Restart to update**. No account or token is needed. (A GitHub token in **Settings → App updates** is optional, only for private forks.)
+The installed app checks GitHub Releases on start and every 4 hours, downloads updates in the background, then shows **Restart to update**. Public repositories need no account or token. While this repository is private, use a GitHub token with access to `Video-Transcribing` and **Contents: read** in **Settings → App updates**.
 
-To publish a release: bump `version` in package.json, commit and push, then:
+Maintainers: see [the release guide](docs/RELEASING.md). Update the version and changelog, commit and push to `main`, then run on Windows:
 
 ```bash
-npm run release   # builds the installer, then uploads it + latest.yml to a GitHub release with the gh CLI
+npm run release:check  # read-only checks against GitHub; no build or upload
+npm run release        # clean install, tests, build, packaged smoke, verified uploads
 ```
+
+Publishing a release does **not** change repository visibility.
 
 ## Providers
 
@@ -86,16 +103,18 @@ The stream-offset fix applies to newly imported audio. Reimport older source vid
 
 ## Development
 
-Requires Node.js 22.19+ (or a supported newer Node release). On Windows PowerShell, use `npm.cmd` if script execution policy blocks `npm.ps1`.
+Requires Node.js 22.19+ (or a supported newer Node release). On Windows PowerShell, use `npm.cmd` if script execution policy blocks `npm.ps1`. Windows installs download the pinned FFmpeg/ffprobe pair in [media-tools.lock.json](media-tools.lock.json) and verify its SHA-256 before extraction. Linux/macOS source runs require system `ffmpeg` and `ffprobe` on PATH, or the path overrides below.
 
 ```bash
-npm install
+npm ci
 npm run app      # build UI + launch the desktop app (uses ./data)
 npm run dev      # browser mode: API on :3462 (node --watch) + Vite on :5173
-npm test         # cue builder + suggestion/compare tests
+npm test         # backend, real media extraction and release safeguards
 node scripts/desktop-smoke.mjs  # after build: isolated Electron interaction checks + screenshots
 npm run dist     # Windows installer → release/Nicos-Transcriber-Setup-<version>.exe (no upload)
-npm run release  # same, then publishes it as a GitHub release (needs gh auth)
+npm run release  # verified build + packaged checks + GitHub release (needs gh auth)
+npm run media:install  # restore the pinned Windows media tools
+npm run legal    # regenerate notices for installed dependencies and fonts
 npm run icon     # rebuild electron/icon.ico from electron/icon.png (after changing the icon)
 ```
 
@@ -103,7 +122,7 @@ npm run icon     # rebuild electron/icon.ico from electron/icon.png (after chang
 
 Env vars: `DATA_DIR`, `PORT` (3462, browser mode), `HOST` (127.0.0.1), `OPEN_BROWSER=1`, `FFMPEG_PATH`, `FFPROBE_PATH`. Electron smoke test: `SCREENSHOT=out.png SCREENSHOT_HASH='#/settings' npx electron .` renders offscreen, captures the window and exits. Optional `SCREENSHOT_JS` (runs in the page first and writes its result to `<screenshot>.json`), `SCREENSHOT_WIDTH`, `SCREENSHOT_DELAY`. Each screenshot folder has an isolated `.electron-profile`, so tests can run beside an open app and never install updates. In Git Bash prefix with `MSYS_NO_PATHCONV=1`.
 
-`node scripts/desktop-smoke.mjs` generates disposable synthetic audio and fake keys under `data/desktop-smoke/`, exercises saving, failed edits, undo, batch fixes, pagination and exports, verifies Windows key protection, and captures Settings, Project, Review and Export. It needs normal Windows account permissions for DPAPI. It makes no paid provider calls. Pass `"release/win-unpacked/Nico's Transcriber.exe"` as its first argument to check the packaged app. `npm test` includes HTTP failure cases, cancellation, timing, chunk reuse, atomic recovery and session isolation.
+`node scripts/desktop-smoke.mjs` generates disposable synthetic audio and fake keys under `data/desktop-smoke/`, exercises saving, failed edits, undo, batch fixes, pagination and exports, verifies Windows key protection, and captures Settings, Project, Review and Export. It needs normal Windows account permissions for DPAPI. It makes no paid provider calls. Pass `"release/win-unpacked/Nicos Transcriber.exe"` as its first argument to check the packaged app. `npm test` includes HTTP failure cases, cancellation, timing, chunk reuse, atomic recovery and session isolation. GitHub Actions runs tests and the UI build on Windows and Linux, plus the desktop smoke check on Windows.
 
 ### Browser / Docker mode (optional)
 
@@ -114,6 +133,7 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 | Method | Path | |
 |---|---|---|
 | GET | `/api/version` | `{ name, version }` |
+| GET | `/api/licenses` | Download bundled open-source notices |
 | GET | `/api/activity` | Active job, import and check counts |
 | GET/PUT | `/api/settings` | Keys masked; masked values sent back are ignored |
 | GET | `/api/providers` | `{ transcribers, proofreaders }` |
@@ -151,10 +171,12 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 
 ## Stack
 
-Electron 44 + electron-updater · Node (Express 5, ESM) · React 19 + Vite · ffmpeg (bundled via ffmpeg-static) · JSON file storage · Anthropic SDK · Plus Jakarta Sans (bundled).
+Electron 44 + electron-updater · Node (Express 5, ESM) · React 19 + Vite · pinned FFmpeg/ffprobe (Windows), system FFmpeg (Docker) · JSON file storage · Anthropic SDK · Plus Jakarta Sans and Baloo 2 (bundled).
 
 Design: "bright, playful productivity UI", light theme with ice-blue canvas, white cards and one blue primary action per screen. Rules in `CLAUDE.md`, tokens in `web/src/styles.css`.
 
 ## License
 
 [MIT](LICENSE) © 2026 Nico Vald. Issues and pull requests are welcome.
+
+Bundled tools and libraries have their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Installed users can download the notices from **Settings → App updates**.

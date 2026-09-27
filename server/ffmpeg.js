@@ -1,14 +1,6 @@
 // Thin wrappers around the bundled ffmpeg/ffprobe binaries.
 import { spawn } from 'node:child_process';
-import path from 'node:path';
-import ffmpegStatic from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
-
-// FFMPEG_PATH / FFPROBE_PATH override the bundled binaries (e.g. in Docker).
-// In the packaged desktop app the binaries live outside the asar archive.
-const unpacked = (p) => p.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
-const FFMPEG = process.env.FFMPEG_PATH || unpacked(ffmpegStatic);
-const FFPROBE = process.env.FFPROBE_PATH || unpacked(ffprobeStatic.path);
+import { FFMPEG, FFPROBE } from './media-tools.js';
 
 // Speech-band filter for noisy gaming/commentary audio: cut rumble and hiss,
 // then even out loudness so quiet talkers are not lost under game audio.

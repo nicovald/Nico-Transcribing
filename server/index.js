@@ -56,6 +56,12 @@ app.param('id', (req,res,next,id) => { try { validateId(id); next(); } catch(err
 const notFound = (res, what = 'Not found') => res.status(404).json({ error: what });
 
 app.get('/api/version', (req, res) => res.json({ name: pkg.name, version: pkg.version }));
+app.get('/api/licenses', (req, res) => {
+  const bundled = path.join(path.dirname(ROOT), 'licenses', 'THIRD-PARTY-LICENSES.txt');
+  const generated = path.join(ROOT, 'build', 'legal', 'THIRD-PARTY-LICENSES.txt');
+  const file = ROOT.endsWith('app.asar') ? bundled : fs.existsSync(generated) ? generated : path.join(ROOT, 'THIRD_PARTY_NOTICES.md');
+  res.download(file, 'Nicos-Transcriber-open-source-notices.txt');
+});
 export const activity = () => ({ ...jobs.activeWork(), checks: sug.activeChecks() });
 export async function shutdown() {
   await Promise.all([

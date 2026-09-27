@@ -1,0 +1,38 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install system media tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Build Docker image
+        if: runner.os == 'Linux'
+        run: docker build -t transcriber-ci .
+      - name: Verify desktop notices
+        if: runner.os == 'Windows'
+        run: npm run legal
+      - name: Desktop smoke check
+        if: runner.os == 'Windows'
+        run: node scripts/desktop-smoke.mjs

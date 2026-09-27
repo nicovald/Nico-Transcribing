@@ -10,3 +10,5 @@ logs
 data/*
 !data/.gitkeep
 release
+vendor
+build/legal

@@ -90,11 +90,12 @@ export default function Updates() {
           </button>
         </div>
         <span className="hint">
-          Not needed: updates come from the public GitHub releases. Only add one if the releases are private (Repository access → <b>Video-Transcribing</b>, Contents → <b>Read-only</b>).
+          Public releases need no token. For a private repository, use a token with Repository access → <b>Video-Transcribing</b>, Contents → <b>Read-only</b>.
         </span>
       </label>
       <div className={`update-status ${update?.status === 'error' ? 'error-text' : ''}`}>{updateMessage(update)}</div>
       {error && <div className="error">{error}</div>}
+      <p className="small"><a href="/api/licenses" download>Download open-source notices</a></p>
       {update?.status === 'downloading' && <Progress value={update.progress} />}
       {update?.status === 'ready' && (
         <button type="button" className="primary" onClick={() => api.post('/api/update/install').catch(err => setError(err.message))}>
