@@ -58,5 +58,6 @@ await capture('settings','#/settings', `(async()=>{ const s=await (await fetch('
 await capture('project',`#/projects/${project.id}`);
 await capture('home','#/');
 await capture('learned','#/learned');
+await capture('team','#/', `(async()=>{ window.dispatchEvent(new KeyboardEvent('keydown',{key:'T',ctrlKey:true,shiftKey:true})); await new Promise(r=>setTimeout(r,300)); if(!document.querySelector('dialog.team-dialog[open]'))throw new Error('Ctrl+Shift+T did not open team setup'); return {teamSetup:'passed'}; })()`);
 await capture('export',`#/jobs/${job.id}`, `(async()=>{ [...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Save next to the videos').click(); await new Promise(r=>setTimeout(r,400)); if(!document.querySelector('dialog[open]'))throw new Error('No export dialog'); return {preview:'passed'}; })()`);
 console.log(`Desktop smoke artifacts: ${folder}`);

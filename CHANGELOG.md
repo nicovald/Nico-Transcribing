@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.10.0 (2026-09-26)
+- Team setup: press **Ctrl+Shift+T** anywhere and drop a `.env` file to load a studio's API keys. Keys are saved like typed ones (protected by Windows, masked in the UI) and never sent back to the page.
+
 ## 0.9.0 (2026-09-26)
 - **Learned fixes**: every Fix, Ignore and retyped word teaches the app. Fixes you keep making (3+ times, almost never ignored) are flagged as **Usually this** with a one-click Fix all; newer or mixed ones show as **Not sure**. Nothing is ever changed automatically. Manage, pin or forget fixes on the new Learned fixes page.
 - **People list**: SSundee (Ian), Crainer (Benjamin), Lookum, Pat, Nico and Roman are preloaded. Names are sent to the transcriber and the AI proofread; sound-alikes ("Craner", "Craners", "Look um") and listed mishearings ("Sunday") are flagged as Not sure.

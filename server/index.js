@@ -18,6 +18,7 @@ import { toSrt } from './srt.js';
 import * as store from './store.js';
 import * as sug from './suggestions.js';
 import * as memory from './memory.js';
+import { parseTeamEnv } from './team.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -111,6 +112,14 @@ app.get('/api/memory/export', (req, res) => {
   res.json(memory.exportMemory());
 });
 app.post('/api/memory/import', (req, res) => res.json(memory.importMemory(req.body)));
+
+// Team setup (Ctrl+Shift+T): { text } of a .env file -> keys saved, only service names returned.
+app.post('/api/team-setup', (req, res) => {
+  const { keys, services, ignored } = parseTeamEnv(typeof req.body?.text === 'string' ? req.body.text : '');
+  if (!services.length) throw badRequest('No API keys found in that file. Lines should look like XAI_API_KEY=your-key.');
+  store.saveSettings({ keys });
+  res.json({ services, ignored });
+});
 
 app.get('/api/providers', (req, res) => res.json({ transcribers: providerList(), proofreaders: proofreaderList() }));
 

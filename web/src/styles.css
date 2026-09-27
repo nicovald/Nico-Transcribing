@@ -496,3 +496,10 @@ button.gold:active:not(:disabled) { box-shadow: 0 0 0 var(--gold-deep); }
   .recent { display: none; }
   .sidebar-foot { font-size: 10.5px; text-align: center; padding: 0; }
 }
+
+.team-dialog { width: min(560px, 90vw); }
+.team-drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 20px; border: 2px dashed #bcd4f6; border-radius: 16px; background: var(--surface-2); text-align: center; }
+.team-drop .icon { color: #fff; background: var(--accent); padding: 10px; border-radius: 12px; box-sizing: content-box; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15); }
+.team-drop.drop-over { border-color: var(--accent); background: var(--accent-soft); outline: none; }
+.team-result { align-items: flex-start; }
+.team-result .icon { margin-top: 3px; }

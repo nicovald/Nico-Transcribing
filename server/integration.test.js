@@ -201,3 +201,14 @@ test('Fix, Ignore and hand edits teach the learned list, and the next check uses
   assert.match(exported.headers.get('content-disposition'),/attachment/);
   assert.equal((await call('/api/memory/import','POST',await exported.json())).body.fixes,0);
 });
+test('team setup file saves keys without ever sending them back',async()=>{
+  const r=await call('/api/team-setup','POST',{text:'XAI_API_KEY=xai-team-secret-9876\r\nOTHER=1'});
+  assert.equal(r.status,200);
+  assert.deepEqual(r.body,{services:['Grok (xAI)'],ignored:['OTHER']});
+  assert.equal(store.getSettings().keys.grok,'xai-team-secret-9876');
+  const shown=(await call('/api/settings')).body.keys.grok;
+  assert.equal(shown,'••••9876');
+  const empty=await call('/api/team-setup','POST',{text:'HELLO=1'});
+  assert.equal(empty.status,400); assert.match(empty.body.error,/No API keys/);
+  store.saveSettings({keys:{grok:'test-only'}});
+});

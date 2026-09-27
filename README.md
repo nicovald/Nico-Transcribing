@@ -32,6 +32,8 @@ Track selections, labels, language and transcription options save automatically 
 
 **Learned fixes** (sidebar) is the app's memory. Every **Fix**, **Ignore** and retyped misheard word counts. A fix you keep making becomes **Usually this** (gold, top of the To review panel, one click fixes every line); newer or mixed ones stay **Not sure** (purple). Nothing changes on its own. The **People** list holds the names usually in videos (with real names and known mishearings); names go to the transcriber and the proofreader, and sound-alikes are flagged. To share with the team, click **Export for the team** and send the file; teammates click **Import file** (merging never double counts).
 
+**Team setup** (for studios): instead of typing keys, an editor can press **Ctrl+Shift+T** and drop a `.env` file you give them. Recognized names: `XAI_API_KEY`/`GROK_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, `ELEVENLABS_API_KEY`, `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `GITHUB_TOKEN`. Keys are saved like typed ones and never shown again; other lines are skipped. Send the file privately and have them delete it afterwards.
+
 Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Enter inserts a line break. A failed save keeps your typed text visible so you can try again. **Fix all** affects only flagged lines recommending that same replacement.
 
 ## Updates
@@ -127,6 +129,7 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 | POST/PATCH/DELETE | `/api/memory/fixes[/:id]` | POST `{ from, to }`; PATCH `{ pin }` (`usual`, `unsure`, `never` or null for automatic) |
 | GET | `/api/memory/export` | Download the memory file |
 | POST | `/api/memory/import` | Merge a memory file: `{ people, fixes }` counts of new entries |
+| POST | `/api/team-setup` | `{ text }` of a .env file → saves recognized keys, returns `{ services, ignored }` (never the values) |
 | GET | `/api/presets/minecraft` | Every vanilla name for the latest Java version |
 | POST | `/api/terms/parse` | `{ text }` → `{ terms }` (lines, CSV, JSON) |
 | POST | `/api/jobs/:id/compare` | `{ provider }` |

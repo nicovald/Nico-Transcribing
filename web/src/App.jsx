@@ -5,6 +5,7 @@ import Learned from './Learned.jsx';
 import Project from './Project.jsx';
 import Review from './Review.jsx';
 import Settings from './Settings.jsx';
+import TeamSetup from './TeamSetup.jsx';
 import { updateMessage } from './Updates.jsx';
 import { desktop, Icon, Logo, Progress } from './shared.jsx';
 
@@ -37,6 +38,16 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [activity, setActivity] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [teamSetup, setTeamSetup] = useState(false);
+
+  // Ctrl+Shift+T opens the (unlisted) team setup import.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') { e.preventDefault(); setTeamSetup(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Notice when a background update has finished downloading.
   useEffect(() => {
@@ -200,6 +211,7 @@ export default function App() {
         </main>
 
         <footer>Grok Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
+        {teamSetup && <TeamSetup onClose={() => setTeamSetup(false)} onImported={loadSettings} />}
         </div>
       </div>
     </AppContext.Provider>
