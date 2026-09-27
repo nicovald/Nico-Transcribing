@@ -212,3 +212,19 @@ test('team setup file saves keys without ever sending them back',async()=>{
   assert.equal(empty.status,400); assert.match(empty.body.error,/No API keys/);
   store.saveSettings({keys:{grok:'test-only'}});
 });
+test('locked team setup files import through the API with a password',async()=>{
+  const locked=(await call('/api/team-setup/lock','POST',{text:'OPENAI_API_KEY=sk-team-lock-4321',password:'studio password'})).body;
+  const text=JSON.stringify(locked);
+  const ask=await call('/api/team-setup','POST',{text});
+  assert.equal(ask.status,400); assert.equal(ask.body.needsPassword,true);
+  const ok=await call('/api/team-setup','POST',{text,password:'studio password'});
+  assert.deepEqual(ok.body.services,['OpenAI']);
+  assert.equal((await call('/api/settings')).body.keys.openai,'••••4321');
+  store.saveSettings({keys:{openai:''}});
+});
+test('proofreading model list explains a missing key instead of failing',async()=>{
+  store.saveSettings({keys:{openai:''}});
+  const r=await call('/api/proofreaders/openai/models');
+  assert.equal(r.status,200); assert.deepEqual(r.body.models,[]); assert.match(r.body.error,/Add a OpenAI key/);
+  assert.equal((await call('/api/providers')).body.proofreaders.find(p=>p.id==='openai').defaultModel,'gpt-6-luna');
+});

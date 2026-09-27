@@ -11,14 +11,14 @@ import { safeName, uniqueFiles, exportPlan, writeExports } from './export.js';
 import * as history from './history.js';
 import * as jobs from './jobs.js';
 import { parseTermList } from './glossary.js';
-import { proofreaderList } from './proofreaders.js';
+import { availableModels, proofreaderList, proofreaders } from './proofreaders.js';
 import { request } from './providers/http.js';
 import { providerList } from './providers/index.js';
 import { toSrt } from './srt.js';
 import * as store from './store.js';
 import * as sug from './suggestions.js';
 import * as memory from './memory.js';
-import { parseTeamEnv } from './team.js';
+import { lockTeamEnv, openTeamFile, parseTeamEnv } from './team.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -113,12 +113,28 @@ app.get('/api/memory/export', (req, res) => {
 });
 app.post('/api/memory/import', (req, res) => res.json(memory.importMemory(req.body)));
 
-// Team setup (Ctrl+Shift+T): { text } of a .env file -> keys saved, only service names returned.
+// Team setup (Ctrl+Shift+T): { text, password? } of a .env or locked file -> keys saved,
+// only service names returned. /lock turns a .env into a password-locked file.
+const bodyText = (req) => (typeof req.body?.text === 'string' ? req.body.text : '');
+app.post('/api/team-setup/lock', (req, res) => res.json(lockTeamEnv(bodyText(req), req.body.password)));
 app.post('/api/team-setup', (req, res) => {
-  const { keys, services, ignored } = parseTeamEnv(typeof req.body?.text === 'string' ? req.body.text : '');
+  let text;
+  try { text = openTeamFile(bodyText(req), req.body.password); }
+  catch (err) { return res.status(400).json({ error: err.message, needsPassword: err.needsPassword }); }
+  const { keys, services, ignored } = parseTeamEnv(text);
   if (!services.length) throw badRequest('No API keys found in that file. Lines should look like XAI_API_KEY=your-key.');
   store.saveSettings({ keys });
   res.json({ services, ignored });
+});
+
+// Models a proofreader's key can use, for the Settings dropdown. Failure is not fatal: the UI falls back to typing.
+app.get('/api/proofreaders/:pid/models', async (req, res) => {
+  const p = proofreaders[req.params.pid];
+  if (!p) return notFound(res);
+  const key = store.getSettings().keys[p.keyName];
+  if (!key) return res.json({ models: [], error: `Add a ${p.name} key to see its models.` });
+  try { res.json({ models: await availableModels(p.id, key) }); }
+  catch (err) { res.json({ models: [], error: `Could not load ${p.name} models: ${err.message}` }); }
 });
 
 app.get('/api/providers', (req, res) => res.json({ transcribers: providerList(), proofreaders: proofreaderList() }));

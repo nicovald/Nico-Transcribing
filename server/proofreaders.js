@@ -9,6 +9,13 @@ export const proofreaders = {
     name: 'Claude (Anthropic)',
     keyName: 'anthropic',
     defaultModel: 'claude-opus-5',
+    suggested: [{ id: 'claude-opus-5', note: 'best' }, { id: 'claude-sonnet-5', note: 'cheaper' }, { id: 'claude-haiku-4-5', note: 'cheapest' }],
+    async listModels(key) {
+      const client = new Anthropic({ apiKey: key });
+      const ids = [];
+      for await (const m of client.models.list()) ids.push(m.id);
+      return ids;
+    },
     async run({ key, model, system, user, schema, signal }) {
       const client = new Anthropic({ apiKey: key });
       const response = await client.beta.messages
@@ -42,7 +49,10 @@ export const proofreaders = {
     id: 'openai',
     name: 'OpenAI',
     keyName: 'openai',
-    defaultModel: 'gpt-5.6',
+    // Cheapest GPT-6 ($0.10 / $0.50 per 1M tokens); plenty for spotting misheard words.
+    defaultModel: 'gpt-6-luna',
+    suggested: [{ id: 'gpt-6-luna', note: 'cheapest' }, { id: 'gpt-6-sol', note: 'smarter, ~20× the price' }],
+    listModels: (key) => listOpenAiStyle('https://api.openai.com/v1/models', key, /^(gpt-|od)/, /(audio|realtime|tts|transcribe|image|search|embedding|moderation|instruct|codex|cyber)/),
     async run({ key, model, system, user, schema, signal }) {
       const data = await request('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -66,6 +76,8 @@ export const proofreaders = {
     name: 'Grok (xAI)',
     keyName: 'grok',
     defaultModel: 'grok-4.7',
+    suggested: [],
+    listModels: (key) => listOpenAiStyle('https://api.x.ai/v1/models', key, /^grok/, /(image|imagine|vision|voice|tts|stt|video)/),
     async run({ key, model, system, user, schema, signal }) {
       const data = await request('https://api.x.ai/v1/chat/completions', {
         method: 'POST',
@@ -85,8 +97,27 @@ export const proofreaders = {
   },
 };
 
+// OpenAI-compatible GET /v1/models, kept to chat models.
+async function listOpenAiStyle(url, key, keep, drop) {
+  const data = await request(url, { headers: { Authorization: `Bearer ${key}` } });
+  return (data.data || []).map((m) => m.id).filter((id) => keep.test(id) && !drop.test(id));
+}
+
+// Models the account can use, newest names first. Cached briefly so opening Settings stays fast.
+const modelCache = new Map();
+export async function availableModels(id, key) {
+  const p = proofreaders[id];
+  if (!p) throw Object.assign(new Error('Unknown proofreader.'), { status: 404 });
+  const cacheKey = `${id}:${key.slice(-8)}`;
+  const hit = modelCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.models;
+  const models = [...new Set(await p.listModels(key))].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  modelCache.set(cacheKey, { at: Date.now(), models });
+  return models;
+}
+
 export const proofreaderList = () =>
-  Object.values(proofreaders).map(({ id, name, keyName, defaultModel }) => ({ id, name, keyName, defaultModel }));
+  Object.values(proofreaders).map(({ id, name, keyName, defaultModel, suggested }) => ({ id, name, keyName, defaultModel, suggested }));
 
 // The chosen proofreader, or the best one we have a key for.
 export function pickProofreader(settings) {

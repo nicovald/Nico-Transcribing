@@ -4,6 +4,7 @@ import { useApp } from './App.jsx';
 import { desktop, Icon } from './shared.jsx';
 import TermLists from './TermLists.jsx';
 import Presets from './Presets.jsx';
+import SubtitlePreview from './SubtitlePreview.jsx';
 import Updates from './Updates.jsx';
 import useUnsaved from './useUnsaved.js';
 
@@ -21,6 +22,46 @@ const openLink = (e, url) => {
     desktop.openExternal(url);
   }
 };
+
+// Proofreading model: default, suggested picks, everything the key can use (live from the service), or typed.
+function ModelPicker({ proofreader, hasKey, value, onChange }) {
+  const [live, setLive] = useState({ models: [], error: null, loading: false });
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    setTyping(false);
+    if (!proofreader || !hasKey) return setLive({ models: [], error: null, loading: false });
+    setLive((l) => ({ ...l, loading: true }));
+    api.get(`/api/proofreaders/${proofreader.id}/models`)
+      .then((r) => setLive({ models: r.models, error: r.error || null, loading: false }))
+      .catch((err) => setLive({ models: [], error: err.message, loading: false }));
+  }, [proofreader?.id, hasKey]);
+  if (!proofreader) return null;
+  const suggested = proofreader.suggested || [];
+  const listed = new Set([proofreader.defaultModel, ...suggested.map((s) => s.id)]);
+  const others = live.models.filter((m) => !listed.has(m));
+  const known = !value || listed.has(value) || live.models.includes(value);
+  const showInput = typing || !known;
+  const note = (id) => suggested.find((s) => s.id === id)?.note;
+  return (
+    <label>
+      Model
+      {showInput ? (
+        <span className="row">
+          <input className="grow" autoFocus={typing} value={value} placeholder={proofreader.defaultModel} onChange={(e) => onChange(e.target.value)} aria-label="Model name" />
+          <button type="button" className="ghost small-btn" onClick={() => { setTyping(false); onChange(''); }}>Use list</button>
+        </span>
+      ) : (
+        <select value={value} onChange={(e) => (e.target.value === '__other' ? setTyping(true) : onChange(e.target.value))}>
+          <option value="">Default · {proofreader.defaultModel}{note(proofreader.defaultModel) ? ` (${note(proofreader.defaultModel)})` : ''}</option>
+          {suggested.filter((s) => s.id !== proofreader.defaultModel).map((s) => <option key={s.id} value={s.id}>{s.id} ({s.note})</option>)}
+          {others.length > 0 && <optgroup label={`All ${proofreader.name} models`}>{others.map((m) => <option key={m} value={m}>{m}</option>)}</optgroup>}
+          <option value="__other">Other… (type a model name)</option>
+        </select>
+      )}
+      <span className="hint">{live.loading ? 'Loading models…' : live.error || (hasKey ? 'The default is plenty for catching misheard words.' : `Add a ${proofreader.name} key to see every model.`)}</span>
+    </label>
+  );
+}
 
 export default function Settings() {
   const { providers, settings, reloadSettings } = useApp();
@@ -134,14 +175,12 @@ export default function Settings() {
             </select>
             <span className="hint">If this one has no key, the first one that does is used.</span>
           </label>
-          <label>
-            Model
-            <input
-              value={form.proofread.models?.[form.proofread.provider] || ''}
-              onChange={text(`proofread.models.${form.proofread.provider}`)}
-              placeholder={providers.proofreaders.find((p) => p.id === form.proofread.provider)?.defaultModel}
-            />
-          </label>
+          <ModelPicker
+            proofreader={providers.proofreaders.find((p) => p.id === form.proofread.provider)}
+            hasKey={Boolean(settings.keys[providers.proofreaders.find((p) => p.id === form.proofread.provider)?.keyName])}
+            value={form.proofread.models?.[form.proofread.provider] || ''}
+            onChange={(v) => set(`proofread.models.${form.proofread.provider}`, v)}
+          />
         </div>
         <div className="checks">
           <label>
@@ -184,6 +223,8 @@ export default function Settings() {
           Underline words below {Math.round(form.confidenceThreshold * 100)}% confidence (Deepgram, AssemblyAI, ElevenLabs)
           <input type="range" min="0.3" max="0.95" step="0.05" value={form.confidenceThreshold} onChange={num('confidenceThreshold')} />
         </label>
+        <div className="preview-head"><h3>Live preview</h3><span className="muted small">A sample clip, split with the settings above. Changes show instantly; save to use them.</span></div>
+        <SubtitlePreview cue={form.cue} threshold={form.confidenceThreshold} />
       </section>
 
       </fieldset>

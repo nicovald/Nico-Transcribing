@@ -34,7 +34,7 @@ Track selections, labels, language and transcription options save automatically 
 
 **Term lists** (Settings) collapse to one line each. **Export** saves a list as a file; **Import list** adds one a teammate exported.
 
-**Team setup** (for studios): instead of typing keys, an editor can press **Ctrl+Shift+T** and drop a `.env` file you give them. Recognized names: `XAI_API_KEY`/`GROK_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, `ELEVENLABS_API_KEY`, `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `GITHUB_TOKEN`. Keys are saved like typed ones and never shown again; other lines are skipped. Send the file privately and have them delete it afterwards.
+**Team setup** (for studios): instead of typing keys, an editor can press **Ctrl+Shift+T** and drop a `.env` file you give them. Recognized names: `XAI_API_KEY`/`GROK_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, `ELEVENLABS_API_KEY`, `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `GITHUB_TOKEN`. Keys are saved like typed ones and never shown again; other lines are skipped. To send it around safely, click **Make a locked file** in the same window: it encrypts the .env with a password (AES-256-GCM, scrypt), and editors type the password when they drop it in. Share the password a different way than the file.
 
 Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Enter inserts a line break. A failed save keeps your typed text visible so you can try again. **Fix all** affects only flagged lines recommending that same replacement.
 
@@ -131,7 +131,9 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 | POST/PATCH/DELETE | `/api/memory/fixes[/:id]` | POST `{ from, to }`; PATCH `{ pin }` (`usual`, `unsure`, `never` or null for automatic) |
 | GET | `/api/memory/export` | Download the memory file |
 | POST | `/api/memory/import` | Merge a memory file: `{ people, fixes }` counts of new entries |
-| POST | `/api/team-setup` | `{ text }` of a .env file → saves recognized keys, returns `{ services, ignored }` (never the values) |
+| POST | `/api/team-setup` | `{ text, password? }` of a .env or locked file → saves recognized keys, returns `{ services, ignored }` (never the values); a locked file without the right password returns 400 with `needsPassword` |
+| POST | `/api/team-setup/lock` | `{ text, password }` → password-locked setup file |
+| GET | `/api/proofreaders/:id/models` | Models the saved key can use (`{ models, error? }`), for the Settings dropdown |
 | GET | `/api/presets/minecraft` | Every vanilla name for the latest Java version |
 | POST | `/api/terms/parse` | `{ text }` → `{ terms }` (lines, CSV, JSON) |
 | POST | `/api/jobs/:id/compare` | `{ provider }` |

@@ -2,6 +2,11 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.12.0 (2026-09-26)
+- Proofreading model is a dropdown: the default, suggested picks with a price hint, every model your key can use (loaded live from the service), or type any name. OpenAI now defaults to **gpt-6-luna**, the cheapest GPT-6 ($0.10 / $0.50 per 1M tokens).
+- Subtitle layout shows a **live preview**: a sample clip plays on a mock video frame and lists every resulting subtitle with timings and line lengths, updating as you change the settings. The confidence slider underlines sample words too.
+- Team setup (Ctrl+Shift+T) now welcomes you to Nico's SUPER SECRET SETUP, and can **password-lock** a setup file (AES-256-GCM, scrypt) so it is safe to send around. Plain .env files still work.
+
 ## 0.11.0 (2026-09-26)
 - Term lists are collapsible (collapsed by default, showing their counts; the app remembers which are open) and each has **Export** to save it as a file. **Import list** adds an exported list, so teammates can share game and modpack lists.
 
