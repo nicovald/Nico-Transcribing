@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.17.0 (2026-09-27)
+- **Our own title bar**: the generic Windows bar is gone. The app runs to the top edge, the minimize/maximize/close buttons sit on the app's canvas color (snap layouts still work), and the scrollbar matches the app. Drag the top strip or the sidebar's top edge to move the window.
+
 ## 0.16.1 (2026-09-27)
 - API errors now say **which service** failed (e.g. "Grok (xAI) account is out of prepaid credits…"), with plain wording for out-of-credits, rate limits, rejected keys, provider outages and connection problems. Covers transcription, AI proofread (incl. Claude) and Jev.
 

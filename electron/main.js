@@ -106,6 +106,10 @@ async function createWindow() {
     title: "Nico's Transcriber",
     backgroundColor: '#f3f8fc',
     autoHideMenuBar: true,
+    // Our own title bar: the page runs to the top edge, Windows keeps the real
+    // minimize/maximize/close buttons (and snap layouts) tinted to match the app.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#f3f8fc', symbolColor: '#0f2a44', height: 36 },
     icon: path.join(here, 'icon.png'),
     webPreferences: {
       preload: path.join(here, 'preload.cjs'),

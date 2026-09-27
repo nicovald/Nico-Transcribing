@@ -130,7 +130,7 @@ export default function App() {
 
   return (
     <AppContext.Provider value={ctx}>
-      <div className="app">
+      <div className={desktop ? 'app desktop-frame' : 'app'}>
         <aside className="sidebar">
           <a className="brand" href="#/">
             <Logo /> Nico's Transcriber
@@ -160,6 +160,9 @@ export default function App() {
           </div>
         </aside>
         <div className="main-col">
+        {/* Desktop: our own title bar strip (drag to move; Windows draws the buttons on the right). */}
+        {desktop && <div className="titlebar" />}
+        <div className="main-scroll">
 
         {update?.status === 'ready' && (
           <div className="update-bar">
@@ -211,6 +214,7 @@ export default function App() {
         </main>
 
         <footer>Nico's Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
+        </div>
         {teamSetup && <TeamSetup onClose={() => setTeamSetup(false)} onImported={loadSettings} />}
         </div>
       </div>

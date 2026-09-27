@@ -1,7 +1,7 @@
 {
   "name": "nicos-transcriber",
   "productName": "Nico's Transcriber",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "description": "Local app that turns multi-track video audio into timestamped SRT subtitles using Grok, OpenAI, Deepgram, AssemblyAI or ElevenLabs.",
   "type": "module",
   "private": true,
