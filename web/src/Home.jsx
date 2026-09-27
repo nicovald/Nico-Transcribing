@@ -4,6 +4,10 @@ import { navigate, useApp } from './App.jsx';
 import { desktop, DropTarget, EditableText, Icon, isMediaFile, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 
+// A stable, playful color per project for its tile.
+const TILE_COLORS = ['#126ce0', '#7b61ff', '#ff7a45', '#1fbf7a', '#ff5fa2', '#2bb3ff', '#e0a100'];
+const tileColor = (name) => TILE_COLORS[[...name].reduce((n, c) => n + c.charCodeAt(0), 0) % TILE_COLORS.length];
+
 const busy = (p) => p.media.some((m) => m.status === 'importing' || m.status === 'queued') || p.jobs.some((j) => j.status === 'running');
 
 export default function Home({ active }) {
@@ -63,9 +67,11 @@ export default function Home({ active }) {
       )}
       <DropTarget className="dropzone" onFiles={(files) => run(() => addFiles(files, null, preset))}>
         <div onClick={browse} className="dropzone-inner">
-          <Icon name="film" size={28} />
-          <strong>Drop videos here to start a project</strong>
-          <span className="muted">Drop several at once for multicam. Every audio track is pulled out automatically.</span>
+          <Icon name="film" size={24} />
+          <div className="grow">
+            <strong>Drop videos here to start a project</strong>
+            <span className="muted">Drop several at once for multicam. Every audio track is pulled out automatically.</span>
+          </div>
           <button className="primary" onClick={(e) => { e.stopPropagation(); browse(); }}>Choose videos…</button>
         </div>
         <input
@@ -117,6 +123,7 @@ export default function Home({ active }) {
               const latest = p.jobs[0];
               return (
                 <li key={p.id} onClick={() => navigate(`/projects/${p.id}`)}>
+                  <span className="proj-tile" style={{ background: tileColor(p.name) }}><Icon name="film" size={18} /></span>
                   <div className="grow">
                     <div className="title">
                       <a href={`#/projects/${p.id}`}>{p.name}</a>

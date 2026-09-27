@@ -183,3 +183,21 @@ test('desktop key migration protects both settings and its backup', () => {
   store.saveSettings({keys:{grok:'another-fake-key'}});
   assert.equal(store.getSettings().keys.grok,'another-fake-key');
 });
+test('Fix, Ignore and hand edits teach the learned list, and the next check uses it',async()=>{
+  const job=seed(), learned=()=>call('/api/memory').then(r=>r.body.fixes);
+  await call(`/api/jobs/${job.id}/suggestions/s-0/accept`,'POST',{});
+  const fix=(await learned()).find(f=>f.from==='couples stone'&&f.to==='Cobblestone');
+  assert.ok(fix.fixed>=1);
+  await call(`/api/jobs/${job.id}/suggestions/s-1/dismiss`,'POST',{});
+  assert.equal((await learned()).find(f=>f.id===fix.id).ignored,fix.ignored+1);
+  jobs.writeCues(job.id,[cue('0-0','hey Crainer grab the ender perl')]);
+  await call(`/api/jobs/${job.id}/cues/0-0`,'PATCH',{text:'hey Crainer grab the Ender Pearl'});
+  assert.equal((await learned()).find(f=>f.from==='ender perl')?.to,'Ender Pearl');
+  const next=seed();jobs.writeCues(next.id,[cue('0-0','one more ender perl'),cue('0-1','Craner come here')]);
+  await sug.runMemoryCheck(next.id);
+  const open=jobs.readSuggestions(next.id).filter(s=>s.status==='open'&&['learned','people'].includes(s.source)).map(s=>`${s.from}>${s.to}>${s.tier}`).sort();
+  assert.deepEqual(open,['Craner>Crainer>unsure','ender perl>Ender Pearl>unsure']);
+  const exported=await fetch(`http://127.0.0.1:${server.address().port}/api/memory/export`);
+  assert.match(exported.headers.get('content-disposition'),/attachment/);
+  assert.equal((await call('/api/memory/import','POST',await exported.json())).body.fixes,0);
+});

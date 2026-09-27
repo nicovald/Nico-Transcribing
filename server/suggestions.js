@@ -13,6 +13,7 @@ import { readTranscript, updateTranscript } from './transcript.js';
 import { pickProofreader } from './proofreaders.js';
 import * as store from './store.js';
 import { glossaryCheck, termPicker } from './glossary.js';
+import { getMemory, memoryCheck, peopleContext, recordFix } from './memory.js';
 import { readCues, readSuggestions, readWords, resolveGlossary, resolveKeyterms, isDeleting } from './jobs.js';
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -220,7 +221,10 @@ function mergeSuggestions(jobId, fresh, source, snapshot) {
   const byId = new Map(snapshot.map(c => [c.id, c]));
   return updateTranscript(jobId, state => {
     const current = new Map(state.cues.map(c => [c.id, c]));
-    const existing = state.suggestions.filter(s => s.source !== source || s.status !== 'open');
+    // What the app learned outranks a plain glossary match for the same words.
+    const replaces = source === 'learned' ? new Set(fresh.map(s => `${s.cueId}|${norm(s.from)}|${norm(s.to)}`)) : null;
+    const existing = state.suggestions.filter(s => (s.source !== source || s.status !== 'open')
+      && !(replaces && s.status === 'open' && ['glossary','people'].includes(s.source) && replaces.has(`${s.cueId}|${norm(s.from)}|${norm(s.to)}`)));
     const seen = new Set(existing.map(s => `${s.cueId}|${norm(s.from)}|${norm(s.to)}`));
     for (const s of fresh) {
       const cue = current.get(s.cueId), old = byId.get(s.cueId);
@@ -291,9 +295,10 @@ export function startProofread(jobId) {
     const settings = store.getSettings(), proofreader = pickProofreader(settings);
     if (!proofreader) throw new Error('AI proofread needs a Claude, OpenAI or xAI key. Add one in Settings.');
     const model = settings.proofread.models?.[proofreader.id] || proofreader.defaultModel;
-    const project = store.getProject(job.projectId), snapshot = readCues(job.id);
+    const project = store.getProject(job.projectId), snapshot = readCues(job.id), people = peopleContext();
+    const context = [project?.context, people && `People often in these videos: ${people}`].filter(Boolean).join('\n');
     const found = await proofread(snapshot, {
-      proofreader, key: settings.keys[proofreader.keyName], model, context: project?.context,
+      proofreader, key: settings.keys[proofreader.keyName], model, context,
       priorityTerms: resolveKeyterms(job.options,settings).split(', ').filter(Boolean),
       glossary: resolveGlossary(job.options,settings), onProgress, signal,
     });
@@ -310,6 +315,15 @@ export function runGlossaryCheck(jobId) {
     mergeSuggestions(job.id,found,'glossary',snapshot);
     await maybeVerify(job,store.getProject(job.projectId),settings,signal);
     return { count: found.length, terms: terms.length };
+  });
+}
+// Free and instant: learned fixes and the people list.
+export function runMemoryCheck(jobId) {
+  return runStep(jobId, 'memory', async (job,onProgress,signal) => {
+    const snapshot = readCues(job.id), found = memoryCheck(snapshot, getMemory());
+    for (const source of ['learned','people']) mergeSuggestions(job.id, found.filter(f => f.source === source), source, snapshot);
+    await maybeVerify(job,store.getProject(job.projectId),store.getSettings(),signal);
+    return { count: found.length };
   });
 }
 export function applyCompare(jobId,otherJobId) {
@@ -348,11 +362,17 @@ export function acceptSuggestion(jobId,suggestionId,{all=false,to}={}) {
     reconcileSuggestions(state);
     return targets;
   }, `${all ? 'Fix matching lines' : 'Fix'}: "${s.from}" → "${replacement}"`);
+  recordFix(s.from, replacement, { fixed: changed.length });
+  if (replacement !== s.to) recordFix(s.from, s.to, { ignored: 1 });
   return { cues: changed, suggestions: state.suggestions };
 }
 export function dismissSuggestion(jobId,suggestionId) {
-  return updateTranscript(jobId,state => {
+  const { state, result: s } = updateTranscript(jobId,state => {
     const s = state.suggestions.find(x => x.id === suggestionId);
-    if (s?.status === 'open') s.status = 'dismissed';
-  }, 'Ignore suggestion').state.suggestions;
+    if (s?.status !== 'open') return null;
+    s.status = 'dismissed';
+    return s;
+  }, 'Ignore suggestion');
+  if (s) recordFix(s.from, s.to, { ignored: 1 });
+  return state.suggestions;
 }

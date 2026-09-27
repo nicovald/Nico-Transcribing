@@ -50,13 +50,13 @@ function lcsLength(a, b) {
 
 // Beyond sounding alike, a real mishearing keeps the first letter, covers most of the
 // term, and has a similar vowel pattern ("strange" is not a mishearing of "String").
-function looksAlike(phrase, term) {
+function looksAlike(phrase, term, maxDist = 0.35, allowSame = false) {
   const a = letters(phrase);
   const b = letters(term);
   if (a[0] !== b[0]) return false;
   if (Math.min(a.length, b.length) / Math.max(a.length, b.length) < 0.75) return false;
   const dist = levenshtein(a, b);
-  if (dist === 0 || dist / Math.max(a.length, b.length) > 0.35) return false;
+  if ((dist === 0 && !allowSame) || dist / Math.max(a.length, b.length) > maxDist) return false;
   const va = vowels(phrase);
   const vb = vowels(term);
   return lcsLength(va, vb) / Math.max(va.length, vb.length, 1) >= 0.5;
@@ -64,19 +64,22 @@ function looksAlike(phrase, term) {
 const stripEdges = (s) => s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 
 // Everyday words that would otherwise get "corrected" into a similar-sounding game term.
-const COMMON = new Set(
+export const COMMON = new Set(
   `about above after again against also always another anything around away back because been before being below better between both bring built but call came can come could day did does doing done down each even every find first from gave give going gone good got great had has have having here high him his home how into its just keep kind know last left let life like line little long look made make many maybe more most much must name need never new next nice now off okay old once only open other our out over own part people place play point put quite really right said same saw say see seem set should show side since small some something still such sure take tell than thank that their them then there these thing think this those though thought three through time today together told too took turn two under until upon use used very wait want was watch water way well went were what when where which while who why will with without word work world would wrong yeah year yes yet you your`.split(' '),
 );
 
 // terms: array of glossary strings. Returns [{ cueId, from, to, reason }].
-export function glossaryCheck(cues, terms) {
+// names: people's names are short ("Crainer", "Lookum"), so shorter keys are allowed but the
+// spelling must be closer, and "Look um" -> "Lookum" or "Craners" -> "Crainer's" count.
+export function glossaryCheck(cues, terms, { names = false } = {}) {
+  const minLetters = names ? 4 : 5, minKey = names ? 3 : 4, maxDist = names ? 0.25 : 0.35;
   const byKey = new Map();
   const exact = new Set();
   for (const term of terms) {
     const t = term.trim();
-    if (letters(t).length < 5) continue;
+    if (letters(t).length < minLetters) continue;
     const key = soundKey(t);
-    if (key.replace('A', '').length < 4) continue; // short keys match too many ordinary words
+    if (key.replace('A', '').length < minKey) continue; // short keys match too many ordinary words
     if (!byKey.has(key)) byKey.set(key, t);
     exact.add(letters(t));
   }
@@ -93,12 +96,19 @@ export function glossaryCheck(cues, terms) {
         if (taken.slice(i, i + n).some(Boolean)) continue;
         const phrase = stripEdges(words.slice(i, i + n).join(' '));
         const flat = letters(phrase);
-        if (!flat || exact.has(flat)) continue;
+        if (!flat || (exact.has(flat) && !(names && n > 1))) continue;
         if (n === 1 && COMMON.has(flat)) continue;
-        const term = byKey.get(soundKey(phrase));
+        let base = phrase, suffix = '';
+        let term = byKey.get(soundKey(phrase));
+        const possessive = names && !term && phrase.match(/^(.+?)('s|s)$/iu);
+        if (possessive && !exact.has(letters(possessive[1]))) {
+          base = possessive[1];
+          suffix = "'s";
+          term = byKey.get(soundKey(base));
+        }
         if (!term) continue;
-        if (!looksAlike(phrase, term)) continue;
-        out.push({ cueId: cue.id, from: phrase, to: term, reason: 'Sounds like a glossary term' });
+        if (!looksAlike(base, term, maxDist, names && n > 1)) continue;
+        out.push({ cueId: cue.id, from: phrase, to: term + suffix, reason: 'Sounds like a glossary term' });
         for (let k = i; k < i + n; k++) taken[k] = true;
       }
     }

@@ -9,10 +9,19 @@ import ExportDialog from './ExportDialog.jsx';
 const TRACK_COLORS = ['#126ce0', '#e0701a', '#1a9e5c', '#8b4fd8', '#c99a0a', '#0f9bb0', '#d6407a', '#5b6b7d'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
 const running = (x) => x?.status === 'running' || x?.status === 'queued';
-const isActive = (j) => running(j) || running(j.proofread) || running(j.compare) || running(j.glossary);
+const isActive = (j) => running(j) || running(j.proofread) || running(j.compare) || running(j.glossary) || running(j.memory);
+const TIER_LABEL = { usual: 'Usually this', unsure: 'Not sure' };
+const fixKey = (s) => [s.from, s.to].map((v) => v.trim().replace(/\s+/g, ' ').toLowerCase()).join('|');
 // Jev strongly disagreeing (<15%) almost always means a junk suggestion; tuck those away.
 const UNLIKELY = 0.15;
 const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
+// "SSundee mic" -> "SS", "Crainer" -> "CR" for the little speaker avatars.
+const initials = (label = '') => {
+  const words = label.replace(/(mic|track|audio|cam)/gi, '').trim().split(/s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || '?').slice(0, 2)).toUpperCase();
+};
+const sourceName = (s) => (s.source === 'ai' ? 'AI proofread' : s.source === 'glossary' ? 'Glossary' : s.sourceLabel);
 
 // "1:14.9" / "1:02:03.4" for the timecode column.
 const timecode = (sec) => formatTime(sec, true);
@@ -64,7 +73,19 @@ export default function Review({ jobId }) {
     }
     return map;
   }, [job, showUnlikely]);
-  const lowConfidence = (c) => !c.edited && !c.reviewed && c.words?.some((w) => w.confidence != null && w.confidence < threshold);
+  // The "To review" panel: one entry per distinct fix, learned "usually this" fixes first.
+  const reviewGroups = useMemo(() => {
+    const groups = new Map();
+    for (const list of openSuggestions.values()) {
+      for (const s of list) {
+        const key = fixKey(s);
+        if (!groups.has(key)) groups.set(key, { key, first: s, cueIds: new Set(), tier: s.tier === 'usual' ? 'usual' : 'unsure' });
+        groups.get(key).cueIds.add(s.cueId);
+      }
+    }
+    return [...groups.values()].sort((a, b) => (a.tier === b.tier ? b.cueIds.size - a.cueIds.size : a.tier === 'usual' ? -1 : 1));
+  }, [openSuggestions]);
+  const lowConfidence = (c) =>!c.edited && !c.reviewed && c.words?.some((w) => w.confidence != null && w.confidence < threshold);
   const hasIssue = (c) => openSuggestions.has(c.id) || lowConfidence(c);
 
   const cues = useMemo(() => {
@@ -99,6 +120,19 @@ export default function Review({ jobId }) {
   useEffect(() => setPage(0), [trackFilter, show, search]);
   useEffect(() => setPage(p => Math.min(p,Math.max(0,Math.ceil(cues.length/100)-1))), [cues.length]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+  const jumpTo = (cueId) => {
+    if (editingCue) return;
+    const index = cues.findIndex((c) => c.id === cueId);
+    if (index < 0) {
+      // Filtered out: show everything, then jump.
+      setTrackFilter('all'); setShow('all'); setSearch('');
+      requestAnimationFrame(() => document.getElementById(`cue-${cueId}`)?.scrollIntoView({ block: 'center' }));
+      setSelected(cueId);
+      return;
+    }
+    setPage(Math.floor(index / 100)); setSelected(cueId);
+    requestAnimationFrame(() => { const row = document.getElementById(`cue-${cueId}`); row?.scrollIntoView({ block: 'center' }); row?.querySelector('.tc')?.focus({ preventScroll: true }); });
+  };
   const jumpIssue = direction => {
     if (editingCue) return;
     const current = cues.findIndex(c => c.id === selected);
@@ -145,7 +179,6 @@ export default function Review({ jobId }) {
 
   const provider = providers.transcribers.find((p) => p.id === job.provider);
   const issueCount = job.cues.filter(hasIssue).length;
-  const suggestionCount = [...openSuggestions.values()].reduce((n, l) => n + l.length, 0);
   const anyConfidence = job.tracks.some((t) => t.hasConfidence);
   const multiVideo = new Set(job.tracks.map((t) => t.mediaId)).size > 1;
   const trackName = (pos) => {
@@ -243,18 +276,18 @@ export default function Review({ jobId }) {
           <span>/</span>
           <a href={`#/projects/${job.projectId}`}>{job.project?.name ?? 'Project'}</a>
         </div>
-        <div className="row">
-          <h1 className="grow">{job.project?.name}</h1>
+        <div className="review-title">
+          <h1>{job.project?.name}</h1>
           <StatusPill status={job.status} />
-        </div>
-        <div className="meta">
-          {provider?.name} · {job.model} · {new Date(job.createdAt).toLocaleString()}
-          {words > 0 && ` · ${words.toLocaleString()} words`}
+          <span className="meta grow">
+            {provider?.name} · {job.model} · {new Date(job.createdAt).toLocaleDateString()}
+            {words > 0 && ` · ${words.toLocaleString()} words`}
+          </span>
         </div>
         <div className="track-list">
           {job.tracks.map((t, pos) => (
             <div key={pos} className="track-line">
-              <span className="dot" style={{ background: trackColor(pos) }} />
+              <span className="avatar" style={{ background: trackColor(pos) }}>{initials(t.label)}</span>
               <span>{trackName(pos)}</span>
               {t.status === 'running' && (t.progress != null ? <Progress value={t.progress} /> : <span className="muted">transcribing…</span>)}
               {t.status === 'queued' && <span className="muted">waiting…</span>}
@@ -282,14 +315,6 @@ export default function Review({ jobId }) {
           <span className="spinner" /> Checking for mistakes. Suggestions appear when each check finishes. You can keep reviewing.
         </div>
       )}
-      {!checking && suggestionCount > 0 && show === 'all' && (
-        <div className="strip strip-accent">
-          <span className="grow">
-            {plural(suggestionCount, 'possible mistake')} to review.
-          </span>
-          <button disabled={Boolean(editingCue)} className="soft small" onClick={() => setShow('issues')}>Review</button>
-        </div>
-      )}
 
       <div className="review-layout">
         <section className="transcript">
@@ -313,15 +338,19 @@ export default function Review({ jobId }) {
                   </select>
                 )}
                 <input disabled={Boolean(editingCue)} aria-label="Search transcript" className="grow search" placeholder="Search transcript" value={search} onChange={(e) => setSearch(e.target.value)} />
-                <button className="ghost" disabled={Boolean(editingCue) || pending || !job.undoCount} onClick={undo} title={job.undoLabel ? `Undo: ${job.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}>
-                  <Icon name="undo" /> Undo
+                <button className="icon-btn undo-btn" aria-label="Undo" disabled={Boolean(editingCue) || pending || !job.undoCount} onClick={undo} title={job.undoLabel ? `Undo: ${job.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}>
+                  <Icon name="undo" size={18} />
                 </button>
               </div>
 
-              <div className="review-controls row wrap"><button className="small" onClick={() => jumpIssue(-1)} disabled={!cues.some(hasIssue)}>Previous issue <kbd>K</kbd></button><button className="small" onClick={() => jumpIssue(1)} disabled={!cues.some(hasIssue)}>Next issue <kbd>J</kbd></button><span className="grow muted small">Space to play the focused timecode</span><select aria-label="Playback speed" value={speed} onChange={e => { const value = Number(e.target.value); setSpeed(value); localStorage.setItem('playback-speed',value); if (audio.current) audio.current.playbackRate = value; }}>{[.75,1,1.25,1.5,2].map(v => <option key={v} value={v}>{v}× speed</option>)}</select></div>
-
+              <div className="list-bar">
+                <button className="small" onClick={() => jumpIssue(-1)} disabled={!cues.some(hasIssue)} title="Previous issue (K)">Prev issue <kbd>K</kbd></button>
+                <button className="small" onClick={() => jumpIssue(1)} disabled={!cues.some(hasIssue)} title="Next issue (J)">Next issue <kbd>J</kbd></button>
+                <span className="grow" />
+                <select className="speed" aria-label="Playback speed" value={speed} onChange={e => { const value = Number(e.target.value); setSpeed(value); localStorage.setItem('playback-speed',value); if (audio.current) audio.current.playbackRate = value; }}>{[.75,1,1.25,1.5,2].map(v => <option key={v} value={v}>{v}× speed</option>)}</select>
+              </div>
               <div className="list-hint">
-                Click a timecode to play the line, click text to edit it.
+                Click a timecode (or press Space on it) to play the line, click text to edit it.
                 {!anyConfidence && ` ${provider?.name} has no per-word confidence, so flags come from the checks on the right.`}
                 {unlikelyCount > 0 && (
                   <>
@@ -370,49 +399,59 @@ export default function Review({ jobId }) {
 
         {doneCount > 0 && (
           <aside className="side">
-            {files.length > 0 && (
-              <div className="side-section">
-                <h3>Export</h3>
-                {desktop && (
-                  <div className="stack-tight">
-                    {canSaveNext && (
-                      <button className="primary" disabled={pending} onClick={() => exportTo()} title="Preview files and choose how to handle existing subtitles.">
-                        Save next to the videos
-                      </button>
-                    )}
-                    <button disabled={pending} onClick={saveToFolder}>
-                      <Icon name="folder" /> Save to folder…
-                    </button>
-                  </div>
-                )}
-                {notice && (
-                  <div className="saved">
-                    <Icon name="check" /> {notice.text}
-                    {desktop && notice.path && (
-                      <button className="link-btn" onClick={() => desktop.showItemInFolder(notice.path)}>Show</button>
-                    )}
-                  </div>
-                )}
-                <ul className="file-list">
-                  {files.map((f) => (
-                    <li key={f.key}>
-                      <a href={srtUrl(f)} download={f.filename} title="Download">
-                        <Icon name="download" />
-                        <span>{f.filename}</span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-                {files.some((f) => f.merged) && (
-                  <label className="check">
-                    <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> Track names in merged files
-                  </label>
-                )}
+            <div className="side-section to-review">
+              <div className="row">
+                <h3 className="grow">To review</h3>
+                {reviewGroups.length > 0 && <span className="badge-count">{reviewGroups.length}</span>}
               </div>
-            )}
+              {!reviewGroups.length ? (
+                <p className="muted small">{checking ? 'Checking for mistakes…' : 'Nothing flagged. Nice.'}</p>
+              ) : (
+                ['usual', 'unsure'].map((tier) => {
+                  const list = reviewGroups.filter((g) => g.tier === tier);
+                  if (!list.length) return null;
+                  return (
+                    <div key={tier} className={`tier-group ${tier}`}>
+                      <div className="tier-head"><Icon name={tier === 'usual' ? 'star' : 'help'} size={14} /> {TIER_LABEL[tier]}</div>
+                      {list.slice(0, 12).map((g) => (
+                        <div key={g.key} className="tier-item">
+                          <button className="link-btn tier-jump" title="Show the line" onClick={() => jumpTo([...g.cueIds][0])}>
+                            <span className="tier-fix">{g.first.from} → {g.first.to}</span>
+                            <span className="tier-meta">{plural(g.cueIds.size, 'line')} · {g.first.source === 'learned' || g.first.source === 'people' ? g.first.reason : sourceName(g.first)}</span>
+                          </button>
+                          <button className={tier === 'usual' ? 'small gold' : 'small'} disabled={pending || Boolean(editingCue)} onClick={() => accept(g.first, g.cueIds.size > 1)}>
+                            {g.cueIds.size > 1 ? `Fix all ${g.cueIds.size}` : 'Fix'}
+                          </button>
+                        </div>
+                      ))}
+                      {list.length > 12 && <p className="muted small">+{list.length - 12} more in the transcript</p>}
+                    </div>
+                  );
+                })
+              )}
+              <a className="small-link" href="#/learned">Every Fix and Ignore teaches the app →</a>
+            </div>
 
             <div className="side-section">
               <h3>Checks</h3>
+
+              <div className="check-item">
+                <div className="check-head">
+                  <span>Learned fixes & people</span>
+                  <button className="ghost small" disabled={running(job.memory)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/memory`); refresh(); })}>
+                    {job.memory ? 'Run again' : 'Run'}
+                  </button>
+                </div>
+                <p>
+                  {running(job.memory)
+                    ? 'Checking…'
+                    : job.memory?.status === 'done'
+                      ? `${plural(job.memory.count, 'match', 'matches')} from what the app has learned.`
+                      : job.memory?.status === 'error'
+                        ? <span className="error-text">{job.memory.error}</span>
+                        : 'Fixes you made before and names from your people list. Free.'}
+                </p>
+              </div>
 
               <div className="check-item">
                 <div className="check-head">
@@ -501,6 +540,47 @@ export default function Review({ jobId }) {
                 Re-split lines…
               </button>
             </div>
+            {files.length > 0 && (
+              <div className="side-section">
+                <h3>Export</h3>
+                {desktop && (
+                  <div className="stack-tight">
+                    {canSaveNext && (
+                      <button className="primary" disabled={pending} onClick={() => exportTo()} title="Preview files and choose how to handle existing subtitles.">
+                        Save next to the videos
+                      </button>
+                    )}
+                    <button disabled={pending} onClick={saveToFolder}>
+                      <Icon name="folder" /> Save to folder…
+                    </button>
+                  </div>
+                )}
+                {notice && (
+                  <div className="saved">
+                    <Icon name="check" /> {notice.text}
+                    {desktop && notice.path && (
+                      <button className="link-btn" onClick={() => desktop.showItemInFolder(notice.path)}>Show</button>
+                    )}
+                  </div>
+                )}
+                <ul className="file-list">
+                  {files.map((f) => (
+                    <li key={f.key}>
+                      <a href={srtUrl(f)} download={f.filename} title="Download">
+                        <Icon name="download" />
+                        <span>{f.filename}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+                {files.some((f) => f.merged) && (
+                  <label className="check">
+                    <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> Track names in merged files
+                  </label>
+                )}
+              </div>
+            )}
+
           </aside>
         )}
       </div>
@@ -538,10 +618,9 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
         {timecode(cue.start)}
       </button>
       <div className="cue-body">
+        <div className="cue-line">
         {label && (
-          <div className="cue-track">
-            <span className="dot" style={{ background: color }} /> {label}
-          </div>
+          <span className="speaker" style={{ background: color }} title={label}>{label}</span>
         )}
         {editing ? (
           <div><textarea
@@ -576,6 +655,7 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
             {cue.edited && <span className="edited">edited</span>}
           </button>
         )}
+        </div>
         {suggestions.map((s) => (
           <Suggestion key={s.id} s={s} pending={pending || editing} allSuggestions={allSuggestions} onAccept={onAccept} onDismiss={onDismiss} />
         ))}
@@ -600,7 +680,8 @@ function Suggestion({ s, pending, allSuggestions, onAccept, onDismiss }) {
   const norm = text => text.trim().toLowerCase().replace(/\s+/g,' ');
   const same = new Set(allSuggestions.filter(x => x.status === 'open' && norm(x.from) === norm(s.from) && norm(x.to) === norm(s.to)).map(x => x.cueId)).size;
   const edited = to.trim() !== s.to;
-  const source = s.source === 'ai' ? 'AI' : s.source === 'glossary' ? 'Glossary' : s.sourceLabel;
+  const source = sourceName(s);
+  const tier = ['learned', 'people'].includes(s.source) ? (s.tier === 'usual' ? 'usual' : 'unsure') : null;
   const conf = s.verified;
 
   return (
@@ -618,8 +699,9 @@ function Suggestion({ s, pending, allSuggestions, onAccept, onDismiss }) {
         }}
         title="Edit the replacement, then Fix"
       />
+      {tier && <span className={`tier ${tier}`}>{TIER_LABEL[tier]}</span>}
       <span className="sug-meta">
-        {source}
+        {tier ? s.reason : source}
         {s.source === 'ai' && s.reason && ` · ${s.reason}`}
         {conf != null && (
           <span className={`conf ${conf >= 0.8 ? 'hi' : conf < 0.4 ? 'lo' : ''}`} title="Jev's confidence that the fix is right">
@@ -657,7 +739,7 @@ function CueText({ cue, threshold, highlights }) {
       hl && i % 2 === 1 ? (
         <mark key={i} className="suspect">{part}</mark>
       ) : (
-        part.split(/(\s+)/).map((tok, j) => (low.has(tok) ? <span key={`${i}-${j}`} className="unsure">{tok}</span> : tok))
+        part.split(/(\s+)/).map((tok, j) => (low.has(tok) ? <span key={`${i}-${j}`} className="low-conf">{tok}</span> : tok))
       ),
     );
   };

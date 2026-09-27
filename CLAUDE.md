@@ -9,8 +9,9 @@ Windows desktop app (Electron) for editors: import multi-track/multicam videos i
 - `server/jobs.js`: import (probe + extract per track to 16 kHz FLAC) and transcription jobs. Cues/words are keyed by **position in job.tracks**, not audio index.
 - `server/providers/*.js`: transcribers, normalized to `{ language, words: [{ text, start, end, confidence, speaker }] }` in seconds.
 - `server/suggestions.js` + `server/proofreaders.js`: AI proofread, compare, Jev, accept/dismiss.
+- `server/memory.js`: learned fixes (tiers: usual/unsure) + people list in `data/memory.json`; Fix/Ignore/hand edits feed it; export/import file for sharing.
 - `server/srt.js`: words → cues → SRT.
-- `web/src/`: React UI, hash routing. Home and Settings stay mounted so switching pages never loses state.
+- `web/src/`: React UI, hash routing. Home, Settings and Learned fixes stay mounted so switching pages never loses state.
 - `data/`: runtime state incl. API keys. Gitignored. Never commit.
 
 ## Rules
@@ -19,7 +20,7 @@ Windows desktop app (Electron) for editors: import multi-track/multicam videos i
 - Claude calls go through `@anthropic-ai/sdk` (not raw fetch).
 - Never modify or rename the user's video files. Display names are ours only.
 - Editors are non-technical: errors must be readable in the UI.
-- Design: "bright, playful productivity UI" (light theme, overrides the global dark default). Ice-blue `#F3F8FC` canvas, white rounded cards, one vivid blue `#126CE0` primary action per screen (secondary actions use `.soft`/plain buttons), green for status/done, amber for things to review, navy text, Plus Jakarta Sans (bundled), outline icons from `Icon` in `shared.jsx` (no emoji), tactile buttons. Tokens live in `web/src/styles.css` `:root`.
+- Design: "bright, playful productivity UI" (light theme, overrides the global dark default). Ice-blue `#F3F8FC` canvas, white rounded cards, left sidebar with colored nav tiles, one vivid blue `#126CE0` primary action per screen (secondary actions use `.soft`/plain buttons), green for status/done, gold = "Usually this", purple = "Not sure", navy text, Plus Jakarta Sans body + Baloo 2 headings (both bundled), outline icons from `Icon` in `shared.jsx` (no emoji), tactile buttons. Tokens live in `web/src/styles.css` `:root`.
 - Bump `version` in package.json for releases (footer + `/api/version` + installer name).
 
 ## Run / verify

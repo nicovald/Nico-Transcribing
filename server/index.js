@@ -17,6 +17,7 @@ import { providerList } from './providers/index.js';
 import { toSrt } from './srt.js';
 import * as store from './store.js';
 import * as sug from './suggestions.js';
+import * as memory from './memory.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -32,8 +33,8 @@ jobs.onJobEvent((event, job) => {
     return;
   }
   const settings = store.getSettings();
-  // Glossary check is free and instant, so it always runs first.
-  sug.runGlossaryCheck(job.id).then(() => {
+  // Learned fixes and the glossary check are free and instant, so they always run first.
+  sug.runMemoryCheck(job.id).then(() => sug.runGlossaryCheck(job.id)).then(() => {
     if (!jobs.isDeleting(job.id) && store.getJob(job.id) && settings.proofread.auto && ['anthropic', 'openai', 'grok'].some((k) => settings.keys[k])) sug.startProofread(job.id);
   });
 });
@@ -98,6 +99,18 @@ app.put('/api/settings', (req, res) => {
   store.saveSettings(patch);
   res.json(publicSettings(store.getSettings()));
 });
+
+// Learned fixes + people list, and sharing them as a file between teammates.
+app.get('/api/memory', (req, res) => res.json(memory.memoryView()));
+app.put('/api/memory/people', (req, res) => res.json(memory.savePeople(req.body.people)));
+app.post('/api/memory/fixes', (req, res) => res.json(memory.addFix(object(req.body))));
+app.patch('/api/memory/fixes/:id', (req, res) => res.json(memory.updateFix(req.params.id, object(req.body))));
+app.delete('/api/memory/fixes/:id', (req, res) => res.json(memory.deleteFix(req.params.id)));
+app.get('/api/memory/export', (req, res) => {
+  res.setHeader('Content-Disposition', `attachment; filename="Grok Transcriber memory ${new Date().toISOString().slice(0, 10)}.json"`);
+  res.json(memory.exportMemory());
+});
+app.post('/api/memory/import', (req, res) => res.json(memory.importMemory(req.body)));
 
 app.get('/api/providers', (req, res) => res.json({ transcribers: providerList(), proofreaders: proofreaderList() }));
 
@@ -341,6 +354,13 @@ app.post('/api/jobs/:id/glossary', (req, res) => {
   res.json({ ok: true });
 });
 
+// Re-check against what the app has learned since (older transcripts benefit too).
+app.post('/api/jobs/:id/memory', (req, res) => {
+  if (!store.getJob(req.params.id)) return notFound(res);
+  sug.runMemoryCheck(req.params.id);
+  res.json({ ok: true });
+});
+
 app.post('/api/jobs/:id/proofread', (req, res) => {
   if (!store.getJob(req.params.id)) return notFound(res);
   sug.startProofread(req.params.id);
@@ -389,7 +409,12 @@ app.patch('/api/jobs/:id/cues/:cueId', (req, res) => {
   if (!Number.isFinite(nextStart) || !Number.isFinite(nextEnd) || nextStart < 0 || nextEnd <= nextStart) throw badRequest('The end time must be after the start time, and times cannot be negative.');
   const { state } = updateTranscript(req.params.id,state => {
     const current = state.cues.find(c=>c.id===cue.id);
-    if (typeof text === 'string' && text !== current.text) Object.assign(current,{text,edited:true});
+    if (typeof text === 'string' && text !== current.text) {
+      // Retyping a few misheard words teaches the app the same as clicking Fix.
+      const lesson = memory.learnedFromEdit(current.text, text);
+      if (lesson) memory.recordFix(lesson.from, lesson.to, { fixed: 1 });
+      Object.assign(current,{text,edited:true});
+    }
     Object.assign(current,{start:nextStart,end:nextEnd});
     if (typeof reviewed === 'boolean') current.reviewed = reviewed;
     sug.reconcileSuggestions(state);

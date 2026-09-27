@@ -30,6 +30,8 @@ You can switch pages while things are running; nothing stops.
 
 Track selections, labels, language and transcription options save automatically with each project. Editing or deleting a preset does not change projects that already use it. When some tracks fail, the transcript shows **Partly complete**; completed tracks remain editable and exportable. **Retry failed tracks** reuses completed audio chunks when the transcription settings are unchanged.
 
+**Learned fixes** (sidebar) is the app's memory. Every **Fix**, **Ignore** and retyped misheard word counts. A fix you keep making becomes **Usually this** (gold, top of the To review panel, one click fixes every line); newer or mixed ones stay **Not sure** (purple). Nothing changes on its own. The **People** list holds the names usually in videos (with real names and known mishearings); names go to the transcriber and the proofreader, and sound-alikes are flagged. To share with the team, click **Export for the team** and send the file; teammates click **Import file** (merging never double counts).
+
 Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Enter inserts a line break. A failed save keeps your typed text visible so you can try again. **Fix all** affects only flagged lines recommending that same replacement.
 
 ## Updates
@@ -71,7 +73,7 @@ Create `server/providers/<name>.js` exporting `{ id, name, model, keyUrl, notes,
 1. **Import**: `ffprobe` lists audio streams; each is extracted with `ffmpeg` to 16 kHz mono FLAC in `data/media/<id>/`. The desktop app reads videos in place (no copy).
 2. **Transcribe**: tracks (from any video in the project) are optionally cleaned with an ffmpeg filter chain and sent to the provider, up to 4 at a time across the whole app. Completed chunks are checkpointed for retry. Audio extracted from new imports preserves each stream's offset relative to the video timeline.
 3. **Cues**: words → subtitle lines (split on sentence ends, pauses, speaker changes, max chars/duration; configurable).
-4. **Suggestions**: `server/glossary.js` (sound-alike check), `server/suggestions.js`. The glossary check runs automatically first (free), then the AI proofread if enabled. The proofread chunks the transcript (150 lines per call) with a JSON schema and sends each chunk the priority terms plus up to 400 glossary names relevant to it, so 10,000+ name modpack lists stay affordable. Compare aligns the two providers' words per cue with an LCS diff. Suggestions only survive if their `from` text actually appears in the line. Edits are recorded in an undo history (`server/history.js`).
+4. **Suggestions**: `server/memory.js` (learned fixes + people, `data/memory.json`), `server/glossary.js` (sound-alike check), `server/suggestions.js`. The learned-fixes check and the glossary check run automatically first (free), then the AI proofread if enabled. The proofread chunks the transcript (150 lines per call) with a JSON schema and sends each chunk the priority terms plus up to 400 glossary names relevant to it, so 10,000+ name modpack lists stay affordable. Compare aligns the two providers' words per cue with an LCS diff. Suggestions only survive if their `from` text actually appears in the line. Edits are recorded in an undo history (`server/history.js`).
 5. **Export**: SRT with UTF-8 BOM (Premiere/Resolve read accents correctly), unique track filenames, and an explicit choice for existing files. Text, suggestion state and undo history save atomically together in `jobs/<id>/transcript.json`; the last valid JSON version is kept as `.bak` and can recover a damaged file. Original legacy transcript files are retained on migration.
 
 The stream-offset fix applies to newly imported audio. Reimport older source videos if their audio streams start late or early; existing transcripts are not silently retimed.
@@ -119,6 +121,12 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 | GET/DELETE | `/api/jobs/:id` | Job + cues + suggestions |
 | POST | `/api/jobs/:id/retry` · `/cancel` · `/rebuild` · `/proofread` | |
 | POST | `/api/jobs/:id/glossary` | `{ termListIds? }`: re-run the sound-alike check, optionally with different lists |
+| POST | `/api/jobs/:id/memory` | Re-run the learned fixes + people check |
+| GET | `/api/memory` | `{ people, fixes }`; each fix has `tier`: `usual`, `unsure` or null |
+| PUT | `/api/memory/people` | `{ people: [{ id?, name, aka, heardAs }] }` |
+| POST/PATCH/DELETE | `/api/memory/fixes[/:id]` | POST `{ from, to }`; PATCH `{ pin }` (`usual`, `unsure`, `never` or null for automatic) |
+| GET | `/api/memory/export` | Download the memory file |
+| POST | `/api/memory/import` | Merge a memory file: `{ people, fixes }` counts of new entries |
 | GET | `/api/presets/minecraft` | Every vanilla name for the latest Java version |
 | POST | `/api/terms/parse` | `{ text }` → `{ terms }` (lines, CSV, JSON) |
 | POST | `/api/jobs/:id/compare` | `{ provider }` |

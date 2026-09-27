@@ -11,6 +11,7 @@ import * as store from './store.js';
 import { readTranscript, updateTranscript } from './transcript.js';
 import { badRequest, validateOptions } from './validation.js';
 import { withTrackSlot } from './work.js';
+import { getMemory, tierOf } from './memory.js';
 
 // Live progress lives in memory so we are not rewriting JSON on every ffmpeg tick.
 const progress = new Map(); // key -> 0..1
@@ -124,10 +125,17 @@ const splitTerms = (text) => String(text || '').split(/[\n,]/).map((t) => t.trim
 const splitLines = (text) => String(text || '').split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
 const selectedLists = (options, settings) => settings.termLists.filter((l) => options.termListIds?.includes(l.id));
 
-// Key terms sent to the transcriber: free-typed extras first, then each selected list's
-// priority terms. Providers cap this (Grok: 100), so the most specific terms go first.
+// Key terms sent to the transcriber: free-typed extras first, then the people list, each selected
+// list's priority terms, then confidently learned fixes. Providers cap this (Grok: 100), so the
+// most specific terms go first.
 export function resolveKeyterms(options, settings) {
-  const all = [...splitTerms(options.keyterms), ...selectedLists(options, settings).flatMap((l) => splitTerms(l.terms))];
+  const memory = getMemory();
+  const all = [
+    ...splitTerms(options.keyterms),
+    ...memory.people.map((p) => p.name),
+    ...selectedLists(options, settings).flatMap((l) => splitTerms(l.terms)),
+    ...memory.fixes.filter((f) => tierOf(f) === 'usual').map((f) => f.to),
+  ];
   return [...new Set(all)].join(', ');
 }
 

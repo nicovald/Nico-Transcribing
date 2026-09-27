@@ -1,13 +1,14 @@
 import { Component, createContext, useContext, useEffect, useState } from 'react';
 import { api, uploadFile } from './api.js';
 import Home from './Home.jsx';
+import Learned from './Learned.jsx';
 import Project from './Project.jsx';
 import Review from './Review.jsx';
 import Settings from './Settings.jsx';
 import { updateMessage } from './Updates.jsx';
 import { desktop, Icon, Logo, Progress } from './shared.jsx';
 
-// Tiny hash router: #/, #/projects/<id>, #/jobs/<id>, #/settings
+// Tiny hash router: #/, #/projects/<id>, #/jobs/<id>, #/learned, #/settings
 function useRoute() {
   const [hash, setHash] = useState(window.location.hash || '#/');
   useEffect(() => {
@@ -35,6 +36,7 @@ export default function App() {
   const [update, setUpdate] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [activity, setActivity] = useState(null);
+  const [recent, setRecent] = useState([]);
 
   // Notice when a background update has finished downloading.
   useEffect(() => {
@@ -62,6 +64,11 @@ export default function App() {
   }, []);
 
   const bumpData = () => setDataVersion((v) => v + 1);
+
+  // Recent projects for the sidebar.
+  useEffect(() => {
+    api.get('/api/projects').then((list) => setRecent(list.slice(0, 5))).catch(() => {});
+  }, [dataVersion, route.join('/')]);
 
   // Add video files to a project (creating one named after the first file if needed).
   // Desktop: files are read in place by path. Browser: uploaded one at a time.
@@ -113,20 +120,35 @@ export default function App() {
   return (
     <AppContext.Provider value={ctx}>
       <div className="app">
-        <header className="topbar">
+        <aside className="sidebar">
           <a className="brand" href="#/">
             <Logo /> Grok Transcriber
           </a>
-          <span className="app-activity" role="status">{activeCount ? <><span className="spinner" /> {activeCount} task{activeCount === 1 ? '' : 's'} in progress</> : 'Your transcription workspace'}</span>
           <nav>
-            <a className={section === 'home' || section === 'projects' || section === 'jobs' ? 'active' : ''} href="#/">
-              Projects
+            <a className={`nav-projects ${section === 'home' || section === 'projects' || section === 'jobs' ? 'active' : ''}`} href="#/" title="Projects">
+              <span className="nav-tile"><Icon name="film" /></span> Projects
             </a>
-            <a className={section === 'settings' ? 'active' : ''} href="#/settings">
-              Settings{noKeys && <span className="dot" title="No API keys yet" />}
+            <a className={`nav-learned ${section === 'learned' ? 'active' : ''}`} href="#/learned" title="Learned fixes">
+              <span className="nav-tile"><Icon name="star" /></span> Learned fixes
+            </a>
+            <a className={`nav-settings ${section === 'settings' ? 'active' : ''}`} href="#/settings" title="Settings">
+              <span className="nav-tile"><Icon name="gear" /></span> Settings{noKeys && <span className="dot" title="No API keys yet" />}
             </a>
           </nav>
-        </header>
+          {recent.length > 0 && (
+            <div className="recent">
+              <div className="recent-title">Recent</div>
+              {recent.map((p) => (
+                <a key={p.id} href={`#/projects/${p.id}`} className={route[1] === p.id ? 'active' : ''} title={p.name}>{p.name}</a>
+              ))}
+            </div>
+          )}
+          <div className="sidebar-foot">
+            <span className="app-activity" role="status">{activeCount ? <><span className="spinner" /> {activeCount} task{activeCount === 1 ? '' : 's'} running</> : null}</span>
+            <span>v{__APP_VERSION__} · {desktop ? 'Windows desktop' : 'Browser'}</span>
+          </div>
+        </aside>
+        <div className="main-col">
 
         {update?.status === 'ready' && (
           <div className="update-bar">
@@ -168,13 +190,17 @@ export default function App() {
               <div hidden={section !== 'settings'}>
                 <Settings />
               </div>
+              <div hidden={section !== 'learned'}>
+                <Learned active={section === 'learned'} />
+              </div>
               {section === 'projects' && route[1] && <Project key={route[1]} projectId={route[1]} />}
               {section === 'jobs' && route[1] && <Review key={route[1]} jobId={route[1]} />}
             </WorkspaceBoundary>
           )}
         </main>
 
-        <footer>Grok Transcriber v{__APP_VERSION__} · {desktop ? 'Windows desktop' : 'Browser'} · Projects saved on this computer</footer>
+        <footer>Grok Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
+        </div>
       </div>
     </AppContext.Provider>
   );
