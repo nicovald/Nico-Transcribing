@@ -12,7 +12,19 @@ const memory = await import('./memory.js');
 const cue = (id, text) => ({ id, track: 0, start: 0, end: 1, text, words: [], edited: false });
 const found = (cues) => memory.memoryCheck(cues).map((s) => `${s.from} -> ${s.to} (${s.tier})`);
 
-test('first run starts with the crew on the people list', () => {
+// A studio's people list, as it would arrive through its settings file.
+const CREW = [
+  { name: 'SSundee', aka: ['Ian'], heardAs: ['Sundee', 'Sunday', 'S Sundee'] },
+  { name: 'Crainer', aka: ['Benjamin'], heardAs: ['Craner', 'Crayner', 'Crane her'] },
+  { name: 'Lookum', aka: [], heardAs: ['Look um', 'Lookem', 'Lookam'] },
+  { name: 'Pat', aka: [], heardAs: [] },
+  { name: 'Nico', aka: ['Nico Vald'], heardAs: ['Neko'] },
+  { name: 'Roman', aka: [], heardAs: [] },
+];
+
+test('first run starts with an empty people list; a saved list feeds the proofreader', () => {
+  assert.deepEqual(memory.getMemory().people, []);
+  memory.savePeople(CREW);
   const names = memory.getMemory().people.map((p) => p.name);
   assert.deepEqual(names, ['SSundee', 'Crainer', 'Lookum', 'Pat', 'Nico', 'Roman']);
   assert.match(memory.peopleContext(), /SSundee \(also called Ian\)/);

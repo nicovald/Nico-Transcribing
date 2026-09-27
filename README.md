@@ -1,12 +1,12 @@
 # Nico's Transcriber
 
-_Formerly "Nico's Transcriber"._
+Free Windows desktop app that turns the audio tracks of videos into timestamped **.srt subtitles** with AI speech-to-text, then helps you catch the words it got wrong. Built for editors working with multi-track, multicam gaming recordings. Formerly "Grok Transcriber".
 
-Windows desktop app that turns the audio tracks of videos into timestamped **.srt subtitles** with AI speech-to-text, then helps you catch the words it got wrong. Built for editors working with multi-track, multicam gaming recordings.
+You bring your own API key for a speech-to-text service (Grok, Deepgram, AssemblyAI, ElevenLabs or OpenAI) and pay that service directly; the app itself is free and [MIT licensed](LICENSE).
 
-- **Presets** per series or recording setup ("Minecraft vanilla", "ATM10 To The Sky"): description, term lists, player names, language, provider and track layout ("Track 1 = Sundee mic, Track 3 = game audio, skip"). Pick one before dropping videos and the project comes pre-filled; create them from any project with **Save as new preset**.
+- **Presets** per series or recording setup ("Minecraft vanilla", "ATM10 To The Sky"): description, term lists, player names, language, provider and track layout ("Track 1 = host mic, Track 3 = game audio, skip"). Pick one before dropping videos and the project comes pre-filled; create them from any project with **Save as new preset**.
 - **Projects**: drop one or more videos (multicam) and rename the project and each video for your own tracking. Your actual files are never renamed or moved.
-- Every audio track is pulled out automatically. Name them ("Sundee mic", "Game audio") and tick the ones to transcribe.
+- Every audio track is pulled out automatically. Name them ("Host mic", "Game audio") and tick the ones to transcribe.
 - Transcribe with **Grok (xAI)**, **Deepgram**, **AssemblyAI**, **ElevenLabs Scribe** or **OpenAI Whisper**. The language and options you pick are remembered.
 - **Find mistakes** like "Couples Stone" → "Cobblestone":
   - **Term lists** per game or modpack. Each has *priority terms* (up to ~100, sent to the transcriber) and *all terms* (unlimited, e.g. every Minecraft item). One click adds every vanilla Minecraft name (~1,850, from PrismarineJS/minecraft-data); drop .txt/.csv/.json files for modpacks.
@@ -21,10 +21,10 @@ Windows desktop app that turns the audio tracks of videos into timestamped **.sr
 
 Current version and release history: see [CHANGELOG.md](CHANGELOG.md).
 
-## For editors
+## Getting started
 
-1. Download **`Nicos-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases) (or get it from Nico) and run it. It installs and adds a desktop shortcut.
-2. Open **Settings → Transcription**: expand one service, paste the API key you were given, and click **Save settings** (Ctrl+S). Other services are optional. A saved key is first validated by the service when you transcribe. Add a GitHub token under **App updates** (see below) for updates.
+1. Download **`Nicos-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases) and run it. It installs and adds a desktop shortcut. The installer isn't code-signed, so Windows may show "Windows protected your PC": click **More info → Run anyway**.
+2. Open **Settings → Transcription**: expand one service, paste your API key (each service has a **Get a key** link), and click **Save settings** (Ctrl+S). Other services are optional. A saved key is first validated by the service when you transcribe.
 3. Pick a **preset** above the drop zone (or none), then drag videos onto the window. Check the track names, language and term lists, hit **Transcribe**.
 4. When it's done, click **Needs a look**, fix or edit what's wrong, then **Save next to the videos**. Review the export preview and click **Export files**. Misclicked in the transcript? **Undo** or Ctrl+Z. AI checks run in the background and may take longer on large transcripts.
 
@@ -42,7 +42,7 @@ Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Ent
 
 ## Updates
 
-The installed app updates itself from GitHub Releases of the private repo `nicovald/Video-Transcribing`. Each editor pastes a fine-grained GitHub token (Repository: Video-Transcribing, Contents: Read-only) in **Settings → Updates**. It checks on start and every 4 hours, downloads in the background, then shows **Restart to update**.
+The installed app updates itself from the public GitHub Releases of `nicovald/Video-Transcribing`: it checks on start and every 4 hours, downloads in the background, then shows **Restart to update**. No account or token is needed. (A GitHub token in **Settings → App updates** is optional, only for private forks.)
 
 To publish a release: bump `version` in package.json, commit and push, then:
 
@@ -63,10 +63,10 @@ npm run release   # builds the installer, then uploads it + latest.yml to a GitH
 | Proofreader | Default model | Key |
 |---|---|---|
 | Claude | `claude-opus-5` | Anthropic key. Uses structured outputs + server-side refusal fallback. |
-| OpenAI | `gpt-5.6` | Same OpenAI key as above. Change the model in Settings if needed. |
+| OpenAI | `gpt-6-luna` | Same OpenAI key as above. Fixed to the cheapest GPT-6 to keep costs predictable. |
 | Grok | `grok-4.7` | Same xAI key as above. |
 
-Models are editable in Settings. In the desktop app, API keys and the GitHub update token are encrypted in `%APPDATA%\Nico's Transcriber\data\settings.json` (installs from before the rename keep `%APPDATA%\Nico's Transcriber`) using Windows account protection; old plaintext keys migrate at startup. The settings backup is also protected. The UI receives only masked values. Audio goes to the selected transcription service, and transcript text goes to enabled proofreaders/verifiers. Browser/Docker mode stores keys in plaintext on its host.
+Models are editable in Settings. In the desktop app, API keys and the GitHub update token are encrypted in `%APPDATA%\Nico's Transcriber\data\settings.json` (installs from before the rename keep `%APPDATA%\Grok Transcriber`) using Windows account protection; old plaintext keys migrate at startup. The settings backup is also protected. The UI receives only masked values. Audio goes to the selected transcription service, and transcript text goes to enabled proofreaders/verifiers. Browser/Docker mode stores keys in plaintext on its host.
 
 Back up the installed app's `data` folder while the app is closed. Projects, extracted audio and transcripts are local. Protected keys require the Windows account that saved them; do not use a copied settings file to distribute credentials to other employees. Moving projects to another Windows account requires entering keys there again.
 
@@ -154,3 +154,7 @@ The same server runs without Electron (`npm start` → <http://localhost:3462>),
 Electron 44 + electron-updater · Node (Express 5, ESM) · React 19 + Vite · ffmpeg (bundled via ffmpeg-static) · JSON file storage · Anthropic SDK · Plus Jakarta Sans (bundled).
 
 Design: "bright, playful productivity UI", light theme with ice-blue canvas, white cards and one blue primary action per screen. Rules in `CLAUDE.md`, tokens in `web/src/styles.css`.
+
+## License
+
+[MIT](LICENSE) © 2026 Nico Vald. Issues and pull requests are welcome.

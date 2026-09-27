@@ -1,5 +1,5 @@
 @echo off
-title Grok Transcriber
+title Nico's Transcriber
 cd /d "%~dp0"
 
 where node >nul 2>nul
@@ -19,12 +19,12 @@ if not exist node_modules (
   if errorlevel 1 goto :fail
 )
 
-echo Starting Grok Transcriber from source...
+echo Starting Nico's Transcriber from source...
 call npm run app
 exit /b 0
 
 :fail
 echo.
-echo Something went wrong during setup. Send a screenshot of this window to Nico.
+echo Something went wrong during setup. Copy the messages above into an issue on GitHub.
 pause
 exit /b 1

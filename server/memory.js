@@ -28,8 +28,8 @@ export function tierOf(fix) {
 export function getMemory() {
   const saved = store.readJson(FILE, null);
   if (saved) return { people: saved.people || [], fixes: saved.fixes || [] };
-  // First run: start with the crew, saved so their ids stay stable.
-  return save({ ...structuredClone(EMPTY), people: STARTER_PEOPLE.map(validPerson) });
+  // First run starts empty; a studio shares its people list through the settings file (Ctrl+Shift+T).
+  return save(structuredClone(EMPTY));
 }
 const save = (memory) => { store.writeJson(FILE, memory); return memory; };
 export const memoryView = (memory = getMemory()) => ({ ...memory, fixes: memory.fixes.map((f) => ({ ...f, tier: tierOf(f) })) });
@@ -185,12 +185,3 @@ export function importMemory(data) {
   return { people, fixes, memory: memoryView(memory) };
 }
 
-// First run: the crew that is usually in the videos.
-export const STARTER_PEOPLE = [
-  { name: 'SSundee', aka: ['Ian'], heardAs: ['Sundee', 'Sunday', 'S Sundee'] },
-  { name: 'Crainer', aka: ['Benjamin'], heardAs: ['Craner', 'Crayner', 'Crane her'] },
-  { name: 'Lookum', aka: [], heardAs: ['Look um', 'Lookem', 'Lookam'] },
-  { name: 'Pat', aka: [], heardAs: [] },
-  { name: 'Nico', aka: ['Nico Vald'], heardAs: ['Neko'] },
-  { name: 'Roman', aka: [], heardAs: [] },
-];

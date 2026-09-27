@@ -184,6 +184,7 @@ test('desktop key migration protects both settings and its backup', () => {
   assert.equal(store.getSettings().keys.grok,'another-fake-key');
 });
 test('Fix, Ignore and hand edits teach the learned list, and the next check uses it',async()=>{
+  await call('/api/memory/people','PUT',{people:[{name:'Crainer',aka:['Benjamin'],heardAs:['Craner']}]});
   const job=seed(), learned=()=>call('/api/memory').then(r=>r.body.fixes);
   await call(`/api/jobs/${job.id}/suggestions/s-0/accept`,'POST',{});
   const fix=(await learned()).find(f=>f.from==='couples stone'&&f.to==='Cobblestone');

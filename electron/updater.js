@@ -1,4 +1,5 @@
-// Self-update from GitHub Releases of the private repo, using the PAT saved in Settings.
+// Self-update from GitHub Releases. Public releases need no token; a token saved in Settings is
+// used when present (a private repo, or to avoid GitHub's anonymous rate limit).
 // Updates download in the background; the UI shows "Restart to update" when one is ready.
 import { app } from 'electron';
 import updaterPkg from 'electron-updater';
@@ -24,18 +25,15 @@ export function createUpdater(getToken, prepareExit = async () => true) {
   autoUpdater.on('update-downloaded', (info) => set({ status: 'ready', version: info.version, progress: 1 }));
   autoUpdater.on('error', (err) => set({ status: 'error', error: friendly(err) }));
 
-  let lastToken = null;
+  let lastFeed = null;
   async function check() {
     if (!app.isPackaged) return state;
     if (state.status === 'downloading' || state.status === 'ready') return state;
     const token = getToken();
-    if (!token) {
-      set({ status: 'no-token', error: null });
-      return state;
-    }
-    if (token !== lastToken) {
-      autoUpdater.setFeedURL({ provider: 'github', ...REPO, private: true, token });
-      lastToken = token;
+    const feed = token ? { provider: 'github', ...REPO, private: true, token } : { provider: 'github', ...REPO };
+    if ((token || 'public') !== lastFeed) {
+      autoUpdater.setFeedURL(feed);
+      lastFeed = token || 'public';
     }
     try {
       await autoUpdater.checkForUpdates();
@@ -62,7 +60,8 @@ export function createUpdater(getToken, prepareExit = async () => true) {
 function friendly(err) {
   const msg = String(err?.message || err);
   if (/401|Bad credentials/i.test(msg)) return 'GitHub rejected the access token. Check it in Settings.';
-  if (/404/.test(msg)) return "Couldn't see the releases. Make sure the token has access to the Video-Transcribing repo (Contents: read).";
+  if (/404/.test(msg)) return "Couldn't see the releases. If the repo is private, add a GitHub token with access to Video-Transcribing (Contents: read).";
+  if (/403|rate limit/i.test(msg)) return 'GitHub is limiting update checks right now; will try again later.';
   if (/ENOTFOUND|ETIMEDOUT|ECONNRESET|net::/i.test(msg)) return 'No internet connection, will try again later.';
   return msg.split('\n')[0].slice(0, 200);
 }

@@ -5,13 +5,12 @@ import { desktop, Icon, Progress } from './shared.jsx';
 import useUnsaved from './useUnsaved.js';
 
 const TOKEN_URL =
-  'https://github.com/settings/personal-access-tokens/new?name=Grok+Transcriber+updates&description=Lets+Grok+Transcriber+download+new+versions&expires_in=none';
+  'https://github.com/settings/personal-access-tokens/new?name=Nico%27s+Transcriber+updates&description=Lets+Nico%27s+Transcriber+download+new+versions&expires_in=none';
 
 export function updateMessage(u) {
   switch (u?.status) {
     case 'dev': return 'Running from source: updates come from git pull, not here.';
     case 'unsupported': return 'Updates are only available in the desktop app.';
-    case 'no-token': return 'Paste a GitHub access token to turn on updates.';
     case 'checking': return 'Checking for updates…';
     case 'downloading': return `Downloading version ${u.version}…`;
     case 'ready': return `Version ${u.version} is downloaded and ready.`;
@@ -73,7 +72,7 @@ export default function Updates() {
       </div>
       <label>
         <span className="row">
-          <strong className="grow">GitHub access token</strong>
+          <strong className="grow">GitHub access token <span className="hint-inline">optional</span></strong>
           <a href={TOKEN_URL} target="_blank" rel="noreferrer" className="small" onClick={openLink}>Create one <Icon name="external" size={12} /></a>
         </span>
         <div className="row">
@@ -91,7 +90,7 @@ export default function Updates() {
           </button>
         </div>
         <span className="hint">
-          On the GitHub page: Repository access → Only select repositories → <b>Video-Transcribing</b>. Permissions → Contents → <b>Read-only</b>. Generate, then paste it here.
+          Not needed: updates come from the public GitHub releases. Only add one if the releases are private (Repository access → <b>Video-Transcribing</b>, Contents → <b>Read-only</b>).
         </span>
       </label>
       <div className={`update-status ${update?.status === 'error' ? 'error-text' : ''}`}>{updateMessage(update)}</div>

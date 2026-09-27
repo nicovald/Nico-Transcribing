@@ -2,6 +2,10 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.16.0 (2026-09-27)
+- Ready for a public repo: updates come from the public GitHub releases with **no token needed** (a saved token still works), MIT license, and the README is written for anyone.
+- New installs start with an empty people list; studios share theirs through the settings file (Ctrl+Shift+T). Existing installs keep their list.
+
 ## 0.15.0 (2026-09-26)
 - **Build with AI** on Term lists: type the game or modpack, copy a ready-made prompt into ChatGPT, Claude, Grok or any AI, paste its answer back, and the list is created (priority terms + full glossary). The answer can be pasted as-is, code fences and all; **Import list** also accepts a file saved from an AI's answer.
 
