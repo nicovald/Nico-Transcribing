@@ -1,0 +1,26 @@
+{
+  "build": "9.0.2-nicos1",
+  "sources": [
+    {
+      "name": "ffmpeg",
+      "version": "9.0.2",
+      "archive": "ffmpeg-9.0.2.tar.gz",
+      "url": "https://github.com/FFmpeg/FFmpeg/archive/946fcce07b6dcd0331c8cc609192aeff5e1924f8.tar.gz",
+      "sha256": "0aa2b1de2a5698b20a23e93d539a9a8e82ca0117496c5bdf05d198805f42bb3b"
+    },
+    {
+      "name": "lame",
+      "version": "3.100",
+      "archive": "lame-3.100.tar.gz",
+      "url": "https://deb.debian.org/debian/pool/main/l/lame/lame_3.100.orig.tar.gz",
+      "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "archive": "zlib-1.3.2.tar.gz",
+      "url": "https://zlib.net/zlib-1.3.2.tar.gz",
+      "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
+    }
+  ]
+}
