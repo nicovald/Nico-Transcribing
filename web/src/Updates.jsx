@@ -93,7 +93,7 @@ export default function Updates({ privateAccess = false, onBusyChange }) {
           </button>
         </div>
         <span className="hint">
-          Public releases need no token. For a private repository, use a token with Repository access → <b>Video-Transcribing</b>, Contents → <b>Read-only</b>.
+          Public releases need no token. For a private repository, use a token with Repository access → <b>Nico-Transcribing</b>, Contents → <b>Read-only</b>.
         </span>
       </label> : <div>
         <button type="button" onClick={saveAndCheck} disabled={busy || update?.status === 'checking' || update?.status === 'downloading'}>Check now</button>

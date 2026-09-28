@@ -1,14 +1,14 @@
 {
   "version": "9.0.2",
   "build": "9.0.2-nicos2",
-  "provider": "nicovald/Video-Transcribing",
-  "url": "https://github.com/nicovald/Video-Transcribing/releases/download/media-tools-9.0.2-nicos2/ffmpeg-9.0.2-nicos2-win64.zip",
+  "provider": "nicovald/Nico-Transcribing",
+  "url": "https://github.com/nicovald/Nico-Transcribing/releases/download/media-tools-9.0.2-nicos2/ffmpeg-9.0.2-nicos2-win64.zip",
   "sha256": "aaaa12d61e4eda0b35f23281bbeccc61c953ad8014aa701bb86b2222e62bc2cc",
   "directory": "ffmpeg-9.0.2-nicos2",
   "sourceCommit": "946fcce07b6dcd0331c8cc609192aeff5e1924f8",
   "buildCommit": "71d49e84c56b4ad3b8c83553a96007775954a60c",
-  "buildRun": "https://github.com/nicovald/Video-Transcribing/actions/runs/36378396066",
-  "sourceUrl": "https://github.com/nicovald/Video-Transcribing/releases/download/media-tools-9.0.2-nicos2/ffmpeg-9.0.2-nicos2-source.tar.gz",
+  "buildRun": "https://github.com/nicovald/Nico-Transcribing/actions/runs/36378396066",
+  "sourceUrl": "https://github.com/nicovald/Nico-Transcribing/releases/download/media-tools-9.0.2-nicos2/ffmpeg-9.0.2-nicos2-source.tar.gz",
   "sourceFile": "ffmpeg-9.0.2-nicos2-source.tar.gz",
   "sourceSha256": "309855fe7f3e1110cc97935eed6abcbc63a749f92c28444067c028e478739399",
   "notices": [

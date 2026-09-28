@@ -1,6 +1,10 @@
 # Changelog
 
-Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
+Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
+
+## 1.0.0 (2026-09-28)
+- **First public release.** Same app as 0.18.0, now open to everyone: download it, and it updates itself with no GitHub account or token.
+- The GitHub repository is now **nicovald/Nico-Transcribing**. Older installs keep updating through GitHub's redirect.
 
 ## 0.18.0 (2026-09-28)
 - **See what it's doing**: while a transcript is being made, a step tracker shows Prepare audio → Transcribe → Check for mistakes → Ready to review, with a live timer, "part 3 of 5" for long videos and how many tracks are done. Each track says what it's doing right now.

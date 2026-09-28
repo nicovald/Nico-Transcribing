@@ -1,7 +1,7 @@
 {
   "name": "nicos-transcriber",
   "productName": "Nico's Transcriber",
-  "version": "0.18.0",
+  "version": "1.0.0",
   "description": "Local app that turns multi-track video audio into timestamped SRT subtitles using Grok, OpenAI, Deepgram, AssemblyAI or ElevenLabs.",
   "type": "module",
   "private": true,
@@ -91,7 +91,7 @@
       {
         "provider": "github",
         "owner": "nicovald",
-        "repo": "Video-Transcribing",
+        "repo": "Nico-Transcribing",
         "private": false,
         "releaseType": "release"
       }
@@ -100,6 +100,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicovald/Video-Transcribing.git"
+    "url": "https://github.com/nicovald/Nico-Transcribing.git"
   }
 }

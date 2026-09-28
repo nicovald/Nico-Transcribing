@@ -6,7 +6,7 @@ import updaterPkg from 'electron-updater';
 
 const { autoUpdater } = updaterPkg;
 
-export const REPO = { owner: 'nicovald', repo: 'Video-Transcribing' };
+export const REPO = { owner: 'nicovald', repo: 'Nico-Transcribing' };
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 
 export function createUpdater(getToken, prepareExit = async () => true) {
