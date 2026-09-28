@@ -1,4 +1,4 @@
-# Nico's Transcriber media tools, 9.0.2-nicos1
+# Nico's Transcriber media tools, 9.0.2-nicos2
 
 FFmpeg and ffprobe are built from the pinned, unmodified FFmpeg 9.0.2 source in
 `sources.json`, with LAME 3.100 and zlib 1.3.2. No other optional third-party
@@ -14,6 +14,10 @@ the complete build scripts, generated FFmpeg configuration, compiler/package
 versions, and imported-DLL reports. There are no local patches. Network protocols
 and hardware video acceleration are disabled; local media decoding, probing,
 audio filters, FLAC and MP3 encoding remain available.
+
+The build copies FFmpeg's `RELEASE` value to the generated `VERSION` file, so
+FFmpeg reports `9.0.2-nicos2` even when built inside the application's checkout.
+Both the generated file and compiled version header are preserved in the bundle.
 
 ## Rebuild
 

@@ -1,5 +1,5 @@
 {
-  "build": "9.0.2-nicos1",
+  "build": "9.0.2-nicos2",
   "sources": [
     {
       "name": "ffmpeg",
