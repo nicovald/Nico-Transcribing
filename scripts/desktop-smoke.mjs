@@ -75,5 +75,38 @@ await capture('terms','#/settings', "(async()=>{\n  const sleep=ms=>new Promise(
 await capture('aiterms','#/settings', "(async()=>{\n  const sleep=ms=>new Promise(r=>setTimeout(r,ms));\n  const set=(el,v)=>{const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));};\n  const btn=(root,name)=>[...root.querySelectorAll('button')].find(b=>b.offsetParent!==null&&b.textContent.trim()===name);\n  [...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.trim()==='Term lists').click(); await sleep(300);\n  const open=async()=>{btn(document,'Build with AI').click(); await sleep(250); return document.querySelector('dialog.ai-dialog[open]');};\n  let dlg=await open(); if(!dlg) throw new Error('Build with AI did not open');\n  set(dlg.querySelector('input'),'Terraria'); await sleep(80);\n  if(!dlg.querySelector('.ai-prompt').value.includes('words from Terraria correctly')) throw new Error('Prompt does not name the game');\n  set(dlg.querySelector('textarea:not(.ai-prompt)'),'Sure! ```json\\n{\"kind\":\"grok-transcriber-term-list\",\"version\":1,\"name\":\"Terraria\",\"terms\":[\"Moon Lord\",\"Terraprisma\"],\"glossary\":[\"Zenith\",\"Eye of Cthulhu\"]}\\n```'); await sleep(80);\n  btn(dlg,'Create list').click(); await sleep(300);\n  if(document.querySelector('dialog.ai-dialog[open]')) throw new Error('Dialog stayed open: '+(document.querySelector('.ai-dialog .error')?.textContent||''));\n  const names=[...document.querySelectorAll('.term-list .list-name')].map(i=>i.value);\n  if(!names.includes('Terraria')) throw new Error('List not created: '+names.join());\n  dlg=await open(); set(dlg.querySelector('input'),'ATM10 To The Sky'); set(dlg.querySelectorAll('input')[1],'Minecraft 1.21 modpack'); await sleep(150);\n  return {aiTermList:'passed'};\n})()");
 await capture('intro','#/', "(async()=>{ const sleep=ms=>new Promise(r=>setTimeout(r,ms));\n  const until=async fn=>{for(let n=0;n<200;n++){if(await fn())return;await sleep(50);}throw new Error('Timed out');};\n  window.dispatchEvent(new KeyboardEvent('keydown',{key:'T',ctrlKey:true,shiftKey:true})); await sleep(300);\n  const dlg=document.querySelector('dialog.team-dialog[open]'); if(!dlg) throw new Error('Ctrl+Shift+T did not open team setup');\n  await until(()=>dlg.querySelector('.granted'));\n  if(dlg.querySelectorAll('.terminal > div').length<7) throw new Error('Intro lines missing');\n  await sleep(700);\n  return {intro:'passed'};\n})()");
 await capture('team','#/', "(async()=>{ const sleep=ms=>new Promise(r=>setTimeout(r,ms));\n  const until=async fn=>{for(let n=0;n<200;n++){if(await fn())return;await sleep(50);}throw new Error('Timed out');};\n  window.dispatchEvent(new KeyboardEvent('keydown',{key:'T',ctrlKey:true,shiftKey:true})); await sleep(300);\n  const dlg=document.querySelector('dialog.team-dialog[open]'); if(!dlg) throw new Error('Ctrl+Shift+T did not open team setup');\n  const skip=[...dlg.querySelectorAll('button')].find(b=>['Skip','Let me in'].includes(b.textContent.trim())); if(!skip) throw new Error('Intro should show until it is seen'); skip.click(); await sleep(150);\n  if(!dlg.textContent.includes(\"Welcome to Nico's SUPER SECRET SETUP!!!\")) throw new Error('Missing welcome title');\n  const settingsFile=await (await fetch('/api/team-setup/settings-export')).text();\n  const dt=new DataTransfer();\n  dt.items.add(new File([['XAI_API_KEY=xai-smoke-4242','OPENAI_API_KEY=sk-smoke-1111'].join(String.fromCharCode(10))],'team.env'));\n  dt.items.add(new File([settingsFile],'Grok Transcriber settings.json'));\n  const input=dlg.querySelector('input[type=file]'); input.files=dt.files; input.dispatchEvent(new Event('change',{bubbles:true}));\n  await until(()=>dlg.querySelector('.team-result')?.textContent.includes('Settings imported'));\n  const text=dlg.querySelector('.team-result').textContent;\n  if(!text.includes('Grok (xAI), OpenAI')) throw new Error('Keys not reported: '+text);\n  if(!dlg.querySelector('.confetti span')) throw new Error('No confetti');\n  const keys=(await (await fetch('/api/settings')).json()).keys; if(keys.grok!=='••••4242'||keys.openai!=='••••1111') throw new Error('Keys not saved');\n  await sleep(250);\n  return {teamSetup:'passed'};\n})()");
+// Fakes an import in progress so the step text under the video can be checked and captured.
+await capture('importing',`#/projects/${project.id}`, `(async()=>{ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const until=async fn=>{for(let n=0;n<100;n++){if(await fn())return;await sleep(50);}throw new Error('Timed out waiting for import step');};
+  const real=window.fetch; const url='/api/projects/${project.id}';
+  window.fetch=async(u,o)=>{ const r=await real(u,o); if(String(u)!==url) return r; const p=await r.json();
+    const m=p.media[0]; m.status='importing'; m.tracks=m.tracks.map((t,i)=>({...t,extracted:i===0,progress:i===1?0.5:null}));
+    return new Response(JSON.stringify(p),{headers:{'Content-Type':'application/json'}}); };
+  location.hash='#/'; await sleep(200); location.hash='#/projects/${project.id}';
+  await until(()=>document.querySelector('.import-step'));
+  const text=document.querySelector('.import-step').textContent;
+  if(!text.includes('Pulling out audio track 2 of 2 · 75%')) throw new Error('Unexpected import step: '+text);
+  await sleep(300);
+  return {importing:'passed'};
+})()`);
+// Fakes a transcription in progress (no provider calls) so the progress steps can be checked and captured.
+await capture('steps',`#/jobs/${job.id}`, `(async()=>{ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const until=async fn=>{for(let n=0;n<100;n++){if(await fn())return;await sleep(50);}throw new Error('Timed out waiting for progress steps');};
+  const real=window.fetch; const url='/api/jobs/${job.id}';
+  window.fetch=async(u,o)=>{ const r=await real(u,o); if(String(u)!==url) return r; const j=await r.json();
+    j.status='running'; j.memory=null; j.glossary=null; j.proofread=null;
+    j.tracks[0]={...j.tracks[0],status:'done'};
+    j.tracks[1]={...j.tracks[1],status:'running',wordCount:0,progress:0.4,step:{step:'sending',part:3,parts:5,seconds:72}};
+    return new Response(JSON.stringify(j),{headers:{'Content-Type':'application/json'}}); };
+  location.hash='#/'; await sleep(200); location.hash='#/jobs/${job.id}';
+  await until(()=>document.querySelector('.job-steps'));
+  const states=[...document.querySelectorAll('.job-step')].map(li=>li.className.replace('job-step ',''));
+  if(states.join()!=='done,active,todo,todo') throw new Error('Unexpected step states: '+states);
+  const text=document.querySelector('.job-steps').textContent;
+  if(!text.includes('1:12 so far')||!text.includes('part 3 of 5')||!text.includes('1 of 2 tracks done')) throw new Error('Missing step details: '+text);
+  if(!document.querySelector('.track-list').textContent.includes('Sending to Grok (xAI)')) throw new Error('Track line has no step');
+  await sleep(300);
+  return {steps:'passed'};
+})()`);
 await capture('export',`#/jobs/${job.id}`, `(async()=>{ [...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Save next to the videos').click(); await new Promise(r=>setTimeout(r,400)); if(!document.querySelector('dialog[open]'))throw new Error('No export dialog'); return {preview:'passed'}; })()`);
 console.log(`Desktop smoke artifacts: ${folder}`);

@@ -30,6 +30,14 @@ function importPercent(m) {
   return done / m.tracks.length;
 }
 
+function importStep(m) {
+  if (m.status === 'queued') return 'Waiting for the video before it to finish…';
+  if (!m.tracks.length) return 'Finding audio tracks…';
+  const next = m.tracks.findIndex((t) => !t.extracted);
+  if (next < 0) return 'Finishing up…';
+  return m.tracks.length > 1 ? `Pulling out audio track ${next + 1} of ${m.tracks.length}` : 'Pulling out the audio track';
+}
+
 export default function Project({ projectId }) {
   const { providers, settings, addFiles, addPaths, dataVersion } = useApp();
   const [project, setProject, refresh, loadError] = usePoll(
@@ -155,7 +163,12 @@ export default function Project({ projectId }) {
               {m.status !== 'ready' && <StatusPill status={m.status} />}
               <button className="icon-btn" title="Remove from project" onClick={() => removeMedia(m)}><Icon name="x" /></button>
             </div>
-            {importing(m) && <Progress value={importPercent(m)} />}
+            {importing(m) && (
+              <div className="import-step">
+                <Progress value={importPercent(m)} />
+                <span className="muted small">{importStep(m)} · {Math.round(importPercent(m) * 100)}%</span>
+              </div>
+            )}
             {m.status === 'error' && <div className="error">{m.error}</div>}
           </div>
         ))}

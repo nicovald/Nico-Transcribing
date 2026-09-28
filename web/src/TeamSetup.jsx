@@ -4,7 +4,7 @@ import { desktop, Icon } from './shared.jsx';
 import Updates from './Updates.jsx';
 
 // Hidden on purpose (Ctrl+Shift+T). A studio gives its editors a .env file with the API keys it pays
-// for, and optionally a settings file with its suggested setup. The first open plays a joke intro.
+// for, and optionally a settings file with its suggested setup. Every open plays a joke intro.
 const INTRO = [
   'Initializing Nico\'s SUPER SECRET SETUP...',
   'Scanning fingerprint... that\'s a mouse. Close enough.',
@@ -14,14 +14,11 @@ const INTRO = [
   'Downloading more RAM... 100%',
   'Hiding Nico\'s credit card... done.',
 ];
-const SEEN_KEY = 'secret-setup-intro-seen';
-const introSeen = () => { try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; } };
-const markSeen = () => { try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage unavailable */ } };
 
 export default function TeamSetup({ onClose, onImported }) {
   const dialog = useRef();
   const fileInput = useRef();
-  const [intro, setIntro] = useState(() => !introSeen());
+  const [intro, setIntro] = useState(true);
   const [shown, setShown] = useState(0);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +34,7 @@ export default function TeamSetup({ onClose, onImported }) {
     const timer = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 250 : 650);
     return () => clearTimeout(timer);
   }, [intro, shown]);
-  const finishIntro = () => { markSeen(); setIntro(false); };
+  const finishIntro = () => setIntro(false);
   const replayIntro = () => { setShown(0); setIntro(true); };
 
   const load = async (file) => {

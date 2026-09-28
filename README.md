@@ -39,7 +39,7 @@ It updates itself.
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/term-lists.png" alt="Building a term list with any AI"><br><sub><b>Build term lists for any game with AI</b></sub></td>
-    <td width="50%"><img src="docs/screenshots/projects.png" alt="Project library"><br><sub><b>All your projects in one place</b></sub></td>
+    <td width="50%"><img src="docs/screenshots/progress.png" alt="Transcription progress steps"><br><sub><b>See exactly what it's doing</b></sub></td>
   </tr>
 </table>
 

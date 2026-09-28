@@ -581,3 +581,18 @@ button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
 .ai-step { display: flex; gap: 14px; align-items: flex-start; }
 .step-num { width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font: 800 15px var(--display); color: #fff; background: var(--grape); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15); margin-top: 22px; }
 .ai-prompt { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--text-2); background: var(--surface-2); }
+
+/* ---------- transcription steps ---------- */
+.job-steps { list-style: none; margin: 4px 0 2px; padding: 14px 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.job-step { display: flex; gap: 10px; align-items: flex-start; min-width: 0; position: relative; }
+.job-step-dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-weight: 800; font-size: 13px; background: var(--surface-2); color: var(--muted); border: 1.5px solid var(--line-strong); }
+.job-step.done .job-step-dot { background: var(--green); border-color: var(--green); color: #fff; }
+.job-step.active .job-step-dot { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.job-step-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; padding-top: 3px; }
+.job-step-text b { font-size: 13.5px; }
+.job-step.todo .job-step-text b { color: var(--muted); }
+.job-step.active .job-step-text b { color: var(--accent-deep); }
+@media (max-width: 760px) { .job-steps { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 460px) { .job-steps { grid-template-columns: 1fr; } }
+.import-step { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.import-step .progress { flex: none; }

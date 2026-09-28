@@ -2,6 +2,11 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.18.0 (2026-09-28)
+- **See what it's doing**: while a transcript is being made, a step tracker shows Prepare audio → Transcribe → Check for mistakes → Ready to review, with a live timer, "part 3 of 5" for long videos and how many tracks are done. Each track says what it's doing right now.
+- Importing a video shows its step too: "Finding audio tracks…", then "Pulling out audio track 2 of 3 · 45%".
+- The secret setup intro now plays every time you press **Ctrl+Shift+T**.
+
 ## 0.17.3 (2026-09-28)
 - If a saved update token stops working, the app now falls back to normal public updates instead of showing an error.
 - New, shorter README with fresh screenshots. The full feature guide and developer notes moved to `docs/`.

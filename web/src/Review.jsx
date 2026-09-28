@@ -5,6 +5,7 @@ import { desktop, Icon, Progress, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 import useUnsaved from './useUnsaved.js';
 import ExportDialog from './ExportDialog.jsx';
+import JobSteps, { showSteps, trackStepText } from './JobSteps.jsx';
 
 const TRACK_COLORS = ['#126ce0', '#e0701a', '#1a9e5c', '#8b4fd8', '#c99a0a', '#0f9bb0', '#d6407a', '#5b6b7d'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
@@ -284,13 +285,14 @@ export default function Review({ jobId }) {
             {words > 0 && ` · ${words.toLocaleString()} words`}
           </span>
         </div>
+        {showSteps(job) && <JobSteps job={job} providerName={provider?.name} />}
         <div className="track-list">
           {job.tracks.map((t, pos) => (
             <div key={pos} className="track-line">
               <span className="avatar" style={{ background: trackColor(pos) }}>{initials(t.label)}</span>
               <span>{trackName(pos)}</span>
-              {t.status === 'running' && (t.progress != null ? <Progress value={t.progress} /> : <span className="muted">transcribing…</span>)}
-              {t.status === 'queued' && <span className="muted">waiting…</span>}
+              {running(t) && running(job) && <span className="muted">{trackStepText(t, provider?.name)}</span>}
+              {t.status === 'running' && t.step?.parts > 1 && <Progress value={t.progress} />}
               {t.status === 'done' && <span className="muted">{t.wordCount.toLocaleString()} words{t.language ? ` · ${t.language}` : ''}</span>}
               {t.status === 'error' && <span className="error-text">{t.error}</span>}
             </div>

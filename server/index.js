@@ -313,6 +313,7 @@ function jobView(j) {
       ...t,
       mediaName: store.getMedia(t.mediaId)?.displayName ?? '(deleted video)',
       progress: jobs.getProgress(`job:${j.id}:${pos}`),
+      step: jobs.getStep(`job:${j.id}:${pos}`),
     })),
   };
 }

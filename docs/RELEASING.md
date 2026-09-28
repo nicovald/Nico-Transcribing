@@ -90,7 +90,7 @@ build scripts, generated configuration, toolchain versions and runtime notices.
 
 Use only the synthetic data from `scripts/desktop-smoke.mjs`. Copy these from the
 newly printed artifact directory into `docs/screenshots/`: `review.png`,
-`home.png` (as `projects.png`), `project.png`, `subtitles.png` and `aiterms.png`
-(as `term-lists.png`). Don't use `export.png` (it shows local paths) or
+`home.png` (as `projects.png`), `project.png`, `subtitles.png`, `steps.png`
+(as `progress.png`) and `aiterms.png` (as `term-lists.png`). Don't use `export.png` (it shows local paths) or
 `learned.png` (it shows the people list). Inspect every image before committing.
 Never use real keys, source paths or customer projects.

@@ -15,6 +15,7 @@ import { getMemory, tierOf } from './memory.js';
 
 // Live progress lives in memory so we are not rewriting JSON on every ffmpeg tick.
 const progress = new Map(); // key -> 0..1
+const steps = new Map(); // job:<id>:<pos> -> { step: 'preparing' | 'sending', part, parts, since }
 const controllers = new Map(); // jobId -> AbortController
 const tasks = new Map();
 const imports = new Map();
@@ -25,6 +26,11 @@ export const activeWork = () => ({ jobs: tasks.size, imports: imports.size });
 const listeners = new Set(); // (event, job) => void, e.g. run proofread when a job finishes
 
 export const getProgress = (key) => progress.get(key) ?? null;
+// Seconds are computed here so a browser with a different clock still shows the right timer.
+export function getStep(key) {
+  const step = steps.get(key);
+  return step ? { step: step.step, part: step.part, parts: step.parts, seconds: Math.round((Date.now() - step.since) / 1000) } : null;
+}
 export const onJobEvent = (fn) => listeners.add(fn);
 
 // ---------------------------------------------------------------- media
@@ -229,6 +235,8 @@ async function transcribeTrack(job, pos, provider, key, keyterms, signal) {
       let result = cached?.signature === signature ? cached.result : null;
       const file = path.join(tmpDir, `chunk-${c}.${provider.codec || 'flac'}`);
       if (!result) {
+      const part = { part: c + 1, parts: chunks };
+      steps.set(progKey, { step: 'preparing', ...part, since: Date.now() });
       await prepareAudio(src, file, {
         cleanup: job.options.voiceCleanup,
         start: chunks > 1 ? offset : undefined,
@@ -238,6 +246,7 @@ async function transcribeTrack(job, pos, provider, key, keyterms, signal) {
       });
       const model = job.model === 'default' ? '' : job.model;
       signal.throwIfAborted();
+      steps.set(progKey, { step: 'sending', ...part, since: Date.now() });
       result = await provider.transcribe({ file, key, model, options, signal });
       signal.throwIfAborted();
       if (!Array.isArray(result?.words) || result.words.some(w => typeof w.text !== 'string' || !Number.isFinite(w.start) || !Number.isFinite(w.end) || w.start < 0 || w.end < w.start)) throw new Error('The service returned invalid word timings. Please retry or choose another service.');
@@ -250,6 +259,7 @@ async function transcribeTrack(job, pos, provider, key, keyterms, signal) {
     return { words, language };
   } finally {
     progress.delete(progKey);
+    steps.delete(progKey);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
