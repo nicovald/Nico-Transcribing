@@ -10,14 +10,17 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
 const config = JSON.parse(fs.readFileSync('scripts/media-build/sources.json', 'utf8'));
 const report = read('dpkg-query', ['-W', 'gcc-mingw-w64-x86-64*', 'g++-mingw-w64-x86-64*', 'mingw-w64*', 'binutils-mingw-w64-x86-64', 'nasm', 'make', 'pkg-config']);
 fs.writeFileSync(path.join(source, 'toolchain.txt'), `${report}\n${read('x86_64-w64-mingw32-gcc', ['--version'])}`);
-const systemDlls = new Set(['advapi32.dll','bcrypt.dll','crypt32.dll','gdi32.dll','kernel32.dll','msvcrt.dll','ntdll.dll','ole32.dll','oleaut32.dll','psapi.dll','secur32.dll','shell32.dll','shlwapi.dll','user32.dll','uuid.dll','vfw32.dll','winmm.dll','ws2_32.dll']);
+// Video for Windows uses Avicap32/Avifil32/Msvfw32 DLLs; Vfw32 is the import-library name.
+const systemDlls = new Set(['advapi32.dll','avicap32.dll','avifil32.dll','bcrypt.dll','crypt32.dll','gdi32.dll','kernel32.dll','msvcrt.dll','msvfw32.dll','ntdll.dll','ole32.dll','oleaut32.dll','psapi.dll','secur32.dll','shell32.dll','shlwapi.dll','user32.dll','uuid.dll','winmm.dll','ws2_32.dll']);
 const binaries = {};
 for (const name of ['ffmpeg', 'ffprobe']) {
   const file = path.join(output, 'bin', `${name}.exe`);
   const imports = read('x86_64-w64-mingw32-objdump', ['-p', file]);
   const dlls = [...imports.matchAll(/DLL Name:\s*(\S+)/g)].map(m => m[1].toLowerCase());
-  for (const dll of dlls) if (!systemDlls.has(dll)) throw new Error(`Unexpected external runtime DLL: ${dll}`);
   fs.writeFileSync(path.join(source, `${name}-imports.txt`), imports);
+  console.log(`${name} imports: ${dlls.join(', ')}`);
+  const unexpected = dlls.filter(dll => !systemDlls.has(dll));
+  if (unexpected.length) throw new Error(`Unexpected external runtime DLLs: ${unexpected.join(', ')}`);
   binaries[`bin/${name}.exe`] = hash(file);
 }
 let compilerNotices = '';
