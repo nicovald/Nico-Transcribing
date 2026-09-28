@@ -1,6 +1,6 @@
 # 0.17.2 launch checks
 
-The repository stays private until the owner changes its visibility.
+These checks ran while the repository was still private.
 
 ## Live transcription (2026-09-27)
 
@@ -28,8 +28,8 @@ generation. They do not test optional AI proofreading or TypeSafe checks.
 - Try the installer and updater in a disposable Windows account or VM. The
   automated packaged-app and saved-data checks do not exercise the NSIS wizard,
   Windows shortcuts, uninstall registry entries or updater installation.
-- Change repository visibility, remove the README's private-preview note, and
-  check the latest download and updater without a GitHub token.
+- Change repository visibility and check the latest download and updater
+  without a GitHub token.
 
 The installer is unsigned. Keep its SmartScreen notice visible in the README
 and release notes until code signing is configured.

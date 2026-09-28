@@ -27,7 +27,9 @@ if (process.platform !== 'win32') {
   const stage = fs.mkdtempSync(path.join(root, 'vendor', 'ffmpeg-stage-'));
   try {
     const files = ['bin/ffmpeg.exe', 'bin/ffprobe.exe', 'LICENSE', 'README.txt', ...(lock.notices || [])];
-    execFileSync('tar', ['-xf', archive, '-C', stage, '--strip-components=1', ...files.map(file => `${lock.directory}/${file}`)], { windowsHide: true });
+    // Windows' bsdtar reads zips; a GNU tar earlier on PATH (Git Bash) would not.
+    const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    execFileSync(tar, ['-xf', archive, '-C', stage, '--strip-components=1', ...files.map(file => `${lock.directory}/${file}`)], { windowsHide: true });
     const binaries = {};
     for (const name of ['ffmpeg', 'ffprobe']) {
       const relative = `bin/${name}.exe`;

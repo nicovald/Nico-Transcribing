@@ -39,6 +39,16 @@ export function createUpdater(getToken, prepareExit = async () => true) {
       await autoUpdater.checkForUpdates();
     } catch (err) {
       set({ status: 'error', error: friendly(err) });
+      // A saved token that expired or was revoked shouldn't block public updates.
+      if (token && /401|404|Bad credentials/i.test(String(err?.message || err))) {
+        autoUpdater.setFeedURL({ provider: 'github', ...REPO });
+        lastFeed = 'public';
+        try {
+          await autoUpdater.checkForUpdates();
+        } catch (err2) {
+          set({ status: 'error', error: friendly(err2) });
+        }
+      }
     }
     return state;
   }

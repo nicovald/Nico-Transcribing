@@ -2,6 +2,12 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.17.3 (2026-09-28)
+- If a saved update token stops working, the app now falls back to normal public updates instead of showing an error.
+- New, shorter README with fresh screenshots. The full feature guide and developer notes moved to `docs/`.
+- "1 project" instead of "1 projects" in the library.
+- Source installs from Git Bash no longer fail while unpacking the media tools.
+
 ## 0.17.2 (2026-09-27)
 - Moved optional GitHub token controls out of normal Settings into the hidden **Ctrl+Shift+T** setup. Public updates need no token.
 - Replaced the broad media-tools bundle with our own FFmpeg 9.0.2 build. Each release includes the exact FFmpeg, LAME and zlib sources, build scripts, configuration and notices. Audio import, voice cleanup, FLAC and MP3 encoding remain supported.

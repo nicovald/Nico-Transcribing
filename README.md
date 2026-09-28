@@ -1,187 +1,54 @@
-# Nico's Transcriber
+<p align="center">
+  <img src="docs/screenshots/banner.png" alt="Nico's Transcriber: turn every audio track of your videos into .srt subtitles, then catch the words the AI got wrong">
+</p>
 
-Free Windows desktop app that turns the audio tracks of videos into timestamped **.srt subtitles** with AI speech-to-text, then helps you catch the words it got wrong. Built for editors working with multi-track, multicam gaming recordings. Formerly "Grok Transcriber".
+<p align="center">
+  <a href="https://github.com/nicovald/Video-Transcribing/releases/latest"><img src="https://img.shields.io/badge/Download_for_Windows-126CE0?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+</p>
 
-You bring your own API key for a speech-to-text service (Grok, Deepgram, AssemblyAI, ElevenLabs or OpenAI) and pay that service directly; the app itself is free and [MIT licensed](LICENSE).
+<p align="center">
+  <a href="https://github.com/nicovald/Video-Transcribing/releases/latest"><img src="https://img.shields.io/github/v/release/nicovald/Video-Transcribing?label=version&color=1A9E5C" alt="Latest version"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-126CE0" alt="Windows 10/11">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7B61FF" alt="MIT license"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-what's_new-FFB020" alt="Changelog"></a>
+</p>
 
-[**Download for Windows**](https://github.com/nicovald/Video-Transcribing/releases/latest) · [Getting started](#getting-started) · [Release history](CHANGELOG.md) · [Report an issue](https://github.com/nicovald/Video-Transcribing/issues)
-
-**Windows 10/11, 64-bit.** No Node.js or separate FFmpeg installation is needed for the desktop installer. Internet access and a funded transcription-service API key are required to transcribe.
-
-**Private preview:** downloads currently require GitHub repository access. Once the repository is public, the same download link and token-free updates will work for everyone.
-
-![Reviewing a multi-track transcript, with suggested fixes and per-speaker labels](docs/screenshots/review.png)
-
-*Review suggestions, keep control of every correction, and export subtitles for your editor. Screenshots use synthetic demo data.*
+![Reviewing a transcript: suggested fixes in gold and purple](docs/screenshots/review.png)
 
 ## What it does
 
-- **Presets** per series or recording setup ("Minecraft vanilla", "ATM10 To The Sky"): description, term lists, player names, language, provider and track layout ("Track 1 = host mic, Track 3 = game audio, skip"). Pick one before dropping videos and the project comes pre-filled; create them from any project with **Save as new preset**.
-- **Projects**: drop one or more videos (multicam) and rename the project and each video for your own tracking. Your actual files are never renamed or moved.
-- Every audio track is pulled out automatically. Name them ("Host mic", "Game audio") and tick the ones to transcribe.
-- Transcribe with **Grok (xAI)**, **Deepgram**, **AssemblyAI**, **ElevenLabs Scribe** or **OpenAI Whisper**. The language and options you pick are remembered.
-- **Find mistakes** like "Couples Stone" → "Cobblestone":
-  - **Term lists** per game or modpack. Each has *priority terms* (up to ~100, sent to the transcriber) and *all terms* (unlimited, e.g. every Minecraft item). One click adds every vanilla Minecraft name (~1,850, from PrismarineJS/minecraft-data); drop .txt/.csv/.json files for modpacks.
-  - **Glossary check** (free, instant) flags phrases that sound like a term but are spelled differently, using a phonetic key plus spelling/vowel checks to avoid flagging ordinary words.
-  - **AI proofread** (Claude, OpenAI or Grok) reads the transcript with your project description and suggests fixes. You click **Fix** or **Fix all**.
-  - **Compare** transcribes again with a second service and flags every word the two disagree on.
-  - Optional **Jev (TypeSafe)** check scores each suggested fix with a confidence %.
-- **Review**: edit any line, edit a suggested fix before applying it, and **Undo** (button, toast or Ctrl+Z) any fix, ignore, edit or delete. Use J/K for the next/previous issue, Space on a focused timecode to play, and the speed selector to slow down or speed up playback. Long transcripts show 100 lines per page.
-- **Safe export**: preview one SRT per track plus a merged SRT per video, choose the files to save, and keep both versions or explicitly replace existing files.
-- **Desktop protection**: API keys are encrypted with Windows account protection. The app warns before closing or restarting with active work or unsaved settings/line edits.
-- **Updates itself** from GitHub Releases, so editors install once.
+- **Drop in videos**: every audio track is pulled out, even multicam.
+- **Transcribe** with Grok, Deepgram, AssemblyAI, ElevenLabs or OpenAI (your own API key).
+- **Catch mistakes** like "couples stone" → **Cobblestone** with term lists, AI proofread and a second opinion.
+- **Learns your fixes**: ones you keep making become one-click **Usually this**.
+- **Export .srt files** next to your videos. Your originals are never touched.
 
-Current version and release history: see [CHANGELOG.md](CHANGELOG.md).
+## Get started
 
-## Getting started
+1. [Download](https://github.com/nicovald/Video-Transcribing/releases/latest) and run the installer. Windows may warn it's unsigned: **More info → Run anyway**.
+2. **Settings → Transcription**: paste an API key and save.
+3. Drop a video, pick the tracks, hit **Transcribe**.
+4. Review the flagged lines, then **Save next to the videos**.
 
-1. Download **`Nicos-Transcriber-Setup-x.y.z.exe`** from the latest [release](https://github.com/nicovald/Video-Transcribing/releases/latest) and run it. It installs for your Windows account and adds a desktop shortcut. The installer isn't code-signed, so Windows may show "Windows protected your PC". If you trust this download, choose **More info → Run anyway**. Release assets include `SHA256SUMS.txt` for verification.
-2. Open **Settings → Transcription**: expand one service, paste your API key (each service has a **Get a key** link), and click **Save settings** (Ctrl+S). Other services are optional. A saved key is first validated by the service when you transcribe.
-3. Pick a **preset** above the drop zone (or none), then drag videos onto the window. Check the track names, language and term lists, hit **Transcribe**.
-4. When it's done, click **Needs a look**, fix or edit what's wrong, then **Save next to the videos**. Review the export preview and click **Export files**. Misclicked in the transcript? **Undo** or Ctrl+Z. AI checks run in the background and may take longer on large transcripts.
+It updates itself.
 
-You can switch pages while things are running; nothing stops.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/project.png" alt="Naming tracks and picking a provider"><br><sub><b>Name your tracks, pick a service</b></sub></td>
+    <td width="50%"><img src="docs/screenshots/subtitles.png" alt="Subtitle layout with live preview"><br><sub><b>Tune subtitles with a live preview</b></sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/term-lists.png" alt="Building a term list with any AI"><br><sub><b>Build term lists for any game with AI</b></sub></td>
+    <td width="50%"><img src="docs/screenshots/projects.png" alt="Project library"><br><sub><b>All your projects in one place</b></sub></td>
+  </tr>
+</table>
 
-![Project library with a video drop zone and a completed example project](docs/screenshots/projects.png)
+<sub>Screenshots use demo data.</sub>
 
-Track selections, labels, language and transcription options save automatically with each project. Editing or deleting a preset does not change projects that already use it. When some tracks fail, the transcript shows **Partly complete**; completed tracks remain editable and exportable. **Retry failed tracks** reuses completed audio chunks when the transcription settings are unchanged.
+## More
 
-**Learned fixes** (sidebar) is the app's memory. Every **Fix**, **Ignore** and retyped misheard word counts. A fix you keep making becomes **Usually this** (gold, top of the To review panel, one click fixes every line); newer or mixed ones stay **Not sure** (purple). Nothing changes on its own. The **People** list holds the names usually in videos (with real names and known mishearings); names go to the transcriber and the proofreader, and sound-alikes are flagged. To share with the team, click **Export for the team** and send the file; teammates click **Import file** (merging never double counts).
+- [User guide](docs/GUIDE.md): every feature, providers, team setup, where your data lives
+- [Development](docs/DEVELOPMENT.md): run from source, Docker, API, how it works
+- [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/nicovald/Video-Transcribing/issues)
 
-**Term lists** (Settings): **Build with AI** gives you a ready-made prompt for any game or modpack; paste it into your AI, paste the answer back, and the list is created. Lists collapse to one line each. **Export** saves a list as a file; **Import list** adds one a teammate exported.
-
-**Team setup** (for studios): instead of typing keys, an editor can press **Ctrl+Shift+T** and drop a `.env` file you give them. Recognized names: `XAI_API_KEY`/`GROK_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, `ELEVENLABS_API_KEY`, `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `GITHUB_TOKEN`. Keys are saved like typed ones and never shown again; other lines are skipped. The same window has **Export my settings** (subtitle layout, proofreading, term lists, presets, learned fixes and people; never keys): give that file to editors too and they drop both in at once. Settings replace layout and proofreading; term lists, presets and learned fixes merge.
-
-Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Enter inserts a line break. A failed save keeps your typed text visible so you can try again. **Fix all** affects only flagged lines recommending that same replacement.
-
-## Updates
-
-The installed app checks GitHub Releases on start and every 4 hours, downloads updates in the background, then shows **Restart to update**. Public repositories need no account or token. **Settings → App updates** has the normal update controls. Private-repository access is tucked into **Ctrl+Shift+T → Private repository updates**; use a GitHub token with access to `Video-Transcribing` and **Contents: read**, or clear that field to return to public updates.
-
-Maintainers: see [the release guide](docs/RELEASING.md). Update the version and changelog, commit and push to `main`, then run on Windows:
-
-```bash
-npm run release:check  # read-only checks against GitHub; no build or upload
-npm run release        # clean install, tests, build, packaged smoke, verified uploads
-```
-
-Publishing a release does **not** change repository visibility.
-
-## Providers
-
-| Transcriber | Default model | Per-word confidence | Notes |
-|---|---|---|---|
-| Grok (xAI) | `grok-voice-transcribe-2.0` | No | $0.10/hr. Language must be set for number/date formatting. |
-| Deepgram | `nova-3` | Yes | |
-| AssemblyAI | account default | Yes | Upload + poll |
-| ElevenLabs | `scribe_v2` | Yes (logprob) | |
-| OpenAI | `whisper-1` | Per sentence | 25 MB limit → 10-min chunks. `whisper-1` is deprecated (shutdown 2027-02-26). |
-
-| Proofreader | Default model | Key |
-|---|---|---|
-| Claude | `claude-opus-5` | Anthropic key. Uses structured outputs + server-side refusal fallback. |
-| OpenAI | `gpt-6-luna` | Same OpenAI key as above. Fixed to the cheapest GPT-6 to keep costs predictable. |
-| Grok | `grok-4.7` | Same xAI key as above. |
-
-Models are editable in Settings. In the desktop app, API keys and the GitHub update token are encrypted in `%APPDATA%\Nico's Transcriber\data\settings.json` (installs from before the rename keep `%APPDATA%\Grok Transcriber`) using Windows account protection; old plaintext keys migrate at startup. The settings backup is also protected. The UI receives only masked values. Audio goes to the selected transcription service, and transcript text goes to enabled proofreaders/verifiers. Browser/Docker mode stores keys in plaintext on its host.
-
-Back up the installed app's `data` folder while the app is closed. Projects, extracted audio and transcripts are local. Protected keys require the Windows account that saved them; do not use a copied settings file to distribute credentials to other employees. Moving projects to another Windows account requires entering keys there again.
-
-### Adding a transcriber
-
-Create `server/providers/<name>.js` exporting `{ id, name, model, keyUrl, notes, transcribe({ file, key, model, options, signal }) }` resolving to `{ language, words: [{ text, start, end, confidence, speaker }] }` (seconds), register it in `server/providers/index.js`, and add a key slot to `DEFAULT_SETTINGS.keys` in `server/store.js`. Set `chunkSeconds` / `codec: 'mp3'` for APIs with small upload limits.
-
-## How it works
-
-1. **Import**: `ffprobe` lists audio streams; each is extracted with `ffmpeg` to 16 kHz mono FLAC in `data/media/<id>/`. The desktop app reads videos in place (no copy).
-2. **Transcribe**: tracks (from any video in the project) are optionally cleaned with an ffmpeg filter chain and sent to the provider, up to 4 at a time across the whole app. Completed chunks are checkpointed for retry. Audio extracted from new imports preserves each stream's offset relative to the video timeline.
-3. **Cues**: words → subtitle lines (split on sentence ends, pauses, speaker changes, max chars/duration; configurable).
-4. **Suggestions**: `server/memory.js` (learned fixes + people, `data/memory.json`), `server/glossary.js` (sound-alike check), `server/suggestions.js`. The learned-fixes check and the glossary check run automatically first (free), then the AI proofread if enabled. The proofread chunks the transcript (150 lines per call) with a JSON schema and sends each chunk the priority terms plus up to 400 glossary names relevant to it, so 10,000+ name modpack lists stay affordable. Compare aligns the two providers' words per cue with an LCS diff. Suggestions only survive if their `from` text actually appears in the line. Edits are recorded in an undo history (`server/history.js`).
-5. **Export**: SRT with UTF-8 BOM (Premiere/Resolve read accents correctly), unique track filenames, and an explicit choice for existing files. Text, suggestion state and undo history save atomically together in `jobs/<id>/transcript.json`; the last valid JSON version is kept as `.bak` and can recover a damaged file. Original legacy transcript files are retained on migration.
-
-The stream-offset fix applies to newly imported audio. Reimport older source videos if their audio streams start late or early; existing transcripts are not silently retimed.
-
-## Development
-
-Requires Node.js 22.19+ (or a supported newer Node release). On Windows PowerShell, use `npm.cmd` if script execution policy blocks `npm.ps1`. Windows installs download the pinned FFmpeg/ffprobe pair in [media-tools.lock.json](media-tools.lock.json) and verify its SHA-256 before extraction. Linux/macOS source runs require system `ffmpeg` and `ffprobe` on PATH, or the path overrides below.
-
-While this repository is private, Windows source installs also need `gh auth login`
-with repository read access to download the media tools. Public downloads need no
-login. The matching sources and build instructions ship with each release; see
-[third-party notices](THIRD_PARTY_NOTICES.md).
-
-```bash
-npm ci
-npm run app      # build UI + launch the desktop app (uses ./data)
-npm run dev      # browser mode: API on :3462 (node --watch) + Vite on :5173
-npm test         # backend, real media extraction and release safeguards
-node scripts/desktop-smoke.mjs  # after build: isolated Electron interaction checks + screenshots
-npm run dist     # Windows installer → release/Nicos-Transcriber-Setup-<version>.exe (no upload)
-npm run release  # verified build + packaged checks + GitHub release (needs gh auth)
-npm run media:install  # restore the pinned Windows media tools
-npm run legal    # regenerate notices for installed dependencies and fonts
-npm run icon     # rebuild electron/icon.ico from electron/icon.png (after changing the icon)
-```
-
-`Start Transcriber.bat` does `npm install` + `npm run app` for running from source.
-
-Env vars: `DATA_DIR`, `PORT` (3462, browser mode), `HOST` (127.0.0.1), `OPEN_BROWSER=1`, `FFMPEG_PATH`, `FFPROBE_PATH`. Electron smoke test: `SCREENSHOT=out.png SCREENSHOT_HASH='#/settings' npx electron .` renders offscreen, captures the window and exits. Optional `SCREENSHOT_JS` (runs in the page first and writes its result to `<screenshot>.json`), `SCREENSHOT_WIDTH`, `SCREENSHOT_DELAY`. Each screenshot folder has an isolated `.electron-profile`, so tests can run beside an open app and never install updates. In Git Bash prefix with `MSYS_NO_PATHCONV=1`.
-
-`node scripts/desktop-smoke.mjs` generates disposable synthetic audio and fake keys under `data/desktop-smoke/`, exercises saving, failed edits, undo, batch fixes, pagination and exports, verifies Windows key protection, and captures Settings, Project, Review and Export. It needs normal Windows account permissions for DPAPI. It makes no paid provider calls. Pass `"release/win-unpacked/Nicos Transcriber.exe"` as its first argument to check the packaged app. `npm test` includes HTTP failure cases, cancellation, timing, chunk reuse, atomic recovery and session isolation. GitHub Actions runs tests and the UI build on Windows and Linux, plus the desktop smoke check on Windows.
-
-### Browser / Docker mode (optional)
-
-The same server runs without Electron (`npm start` → <http://localhost:3462>), where videos are uploaded instead of read in place. `docker compose up -d --build` runs it on a server at port 3462. There is no login, so only expose it on a private network (a home LAN or a VPN such as Tailscale), never the open internet.
-
-## API
-
-| Method | Path | |
-|---|---|---|
-| GET | `/api/version` | `{ name, version }` |
-| GET | `/api/licenses` | Download bundled open-source notices |
-| GET | `/api/activity` | Active job, import and check counts |
-| GET/PUT | `/api/settings` | Keys masked; masked values sent back are ignored |
-| GET | `/api/providers` | `{ transcribers, proofreaders }` |
-| GET/POST | `/api/projects` | POST `{ name, presetId? }` (preset fills the description) |
-| GET/PATCH/DELETE | `/api/projects/:id` | PATCH `{ name, context, presetId, setup }`; setup contains provider, options and track choices |
-| POST | `/api/projects/:id/media` | `{ paths: [...] }`: import files from disk |
-| POST | `/api/projects/:id/upload` | multipart `file` (browser mode) |
-| PATCH/DELETE | `/api/media/:id` | PATCH `{ displayName }` |
-| GET | `/api/media/:id/tracks/:n/audio` | Extracted FLAC (Range supported) |
-| POST | `/api/jobs` | `{ projectId, provider, tracks: [{ mediaId, index, label }], options }` |
-| GET/DELETE | `/api/jobs/:id` | Job + cues + suggestions |
-| POST | `/api/jobs/:id/retry` · `/cancel` · `/rebuild` · `/proofread` | |
-| POST | `/api/jobs/:id/glossary` | `{ termListIds? }`: re-run the sound-alike check, optionally with different lists |
-| POST | `/api/jobs/:id/memory` | Re-run the learned fixes + people check |
-| GET | `/api/memory` | `{ people, fixes }`; each fix has `tier`: `usual`, `unsure` or null |
-| PUT | `/api/memory/people` | `{ people: [{ id?, name, aka, heardAs }] }` |
-| POST/PATCH/DELETE | `/api/memory/fixes[/:id]` | POST `{ from, to }`; PATCH `{ pin }` (`usual`, `unsure`, `never` or null for automatic) |
-| GET | `/api/memory/export` | Download the memory file |
-| POST | `/api/memory/import` | Merge a memory file: `{ people, fixes }` counts of new entries |
-| POST | `/api/team-setup` | `{ text }` of a .env file → saves recognized keys, returns `{ services, ignored }` (never the values); of an exported settings file → imports it, returns `{ imported }` |
-| GET | `/api/team-setup/settings-export` | Download a settings file (no API keys) |
-| GET | `/api/proofreaders/:id/models` | Models the saved key can use (`{ models, error? }`), for the Settings dropdown |
-| GET | `/api/presets/minecraft` | Every vanilla name for the latest Java version |
-| POST | `/api/terms/parse` | `{ text }` → `{ terms }` (lines, CSV, JSON) |
-| POST | `/api/jobs/:id/compare` | `{ provider }` |
-| POST | `/api/jobs/:id/suggestions/:sid/accept` | `{ all?, to? }` |
-| POST | `/api/jobs/:id/suggestions/:sid/dismiss` | |
-| POST | `/api/jobs/:id/undo` | Reverts the last edit (history in `jobs/<id>/transcript.json`, 100 steps) |
-| PATCH/DELETE | `/api/jobs/:id/cues/:cueId` | `{ text, start, end, reviewed }` |
-| GET | `/api/jobs/:id/srt-files` · `/api/jobs/:id/srt?file=<key>` | List / download |
-| POST | `/api/jobs/:id/export/preview` | `{ dir?, keys? }`: filenames, destinations and existing-file flags |
-| POST | `/api/jobs/:id/export` | `{ dir?, labels?, keys?, conflict? }`: conflict is `keep-both` or `replace`; an existing file without a choice returns 409 |
-| GET | `/api/update` | Updater status (desktop only) |
-| POST | `/api/update/check` · `/api/update/install` | Check now / restart into a downloaded update |
-
-## Stack
-
-Electron 44 + electron-updater · Node (Express 5, ESM) · React 19 + Vite · pinned FFmpeg/ffprobe (Windows), system FFmpeg (Docker) · JSON file storage · Anthropic SDK · Plus Jakarta Sans and Baloo 2 (bundled).
-
-Design: "bright, playful productivity UI", light theme with ice-blue canvas, white cards and one blue primary action per screen. Rules in `CLAUDE.md`, tokens in `web/src/styles.css`.
-
-## License
-
-[MIT](LICENSE) © 2026 Nico Vald. Issues and pull requests are welcome.
-
-Bundled tools and libraries have their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Installed users can download the notices from **Settings → App updates**.
+The app is free and [MIT licensed](LICENSE). You pay your speech-to-text service directly. Bundled FFmpeg and other tools have their own licenses: see [third-party notices](THIRD_PARTY_NOTICES.md).

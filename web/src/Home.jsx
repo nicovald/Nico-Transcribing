@@ -110,7 +110,7 @@ export default function Home({ active }) {
       {loadError && <div className="error">{loadError} <button onClick={refresh}>Try again</button></div>}
 
       <section>
-        <div className="row library-toolbar"><h2 className="grow">Your library <span className="muted small">{projects?.length || 0} projects</span></h2><input aria-label="Search projects" placeholder="Search projects…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Sort projects" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest first</option><option value="name">Name A–Z</option></select></div>
+        <div className="row library-toolbar"><h2 className="grow">Your library <span className="muted small">{projects?.length || 0} {projects?.length === 1 ? 'project' : 'projects'}</span></h2><input aria-label="Search projects" placeholder="Search projects…" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Sort projects" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest first</option><option value="name">Name A–Z</option></select></div>
         {!projects ? (
           <p className="muted">Loading…</p>
         ) : !projects.length ? (
