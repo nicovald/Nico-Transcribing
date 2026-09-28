@@ -34,6 +34,9 @@ From the extracted source bundle, create `scripts/media-build/` and copy
 Copy `archives/` to `release/media-build/source-archives/` to build offline after
 installing the compiler packages. Run the same command from that directory.
 The workflow is `.github/workflows/media-tools.yml` in the repository.
+It uploads both archives and checksums to a draft `media-tools-<build>` release,
+verifies the uploaded digests, and leaves publication to the maintainer after
+Windows validation. A build never overwrites an existing release.
 
 The executables are not bound to the application. Replace
 `resources/media-tools/bin/ffmpeg.exe` and `ffprobe.exe` with compatible builds,
