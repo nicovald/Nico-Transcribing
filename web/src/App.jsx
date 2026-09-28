@@ -215,7 +215,7 @@ export default function App() {
 
         <footer>Nico's Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
         </div>
-        {teamSetup && <TeamSetup onClose={() => setTeamSetup(false)} onImported={loadSettings} />}
+        {teamSetup && settings && <TeamSetup onClose={() => setTeamSetup(false)} onImported={loadSettings} />}
         </div>
       </div>
     </AppContext.Provider>

@@ -19,6 +19,9 @@ const gh = (...args) => read('gh', args);
 const git = (...args) => read('git', args);
 const head = git('rev-parse', 'HEAD');
 const changelog = releaseNotes(fs.readFileSync('CHANGELOG.md', 'utf8'), pkg.version);
+const previousIndex = process.argv.indexOf('--previous');
+const previous = previousIndex < 0 ? null : process.argv[previousIndex + 1];
+if (previousIndex >= 0 && (!previous || !fs.existsSync(previous))) throw new Error('--previous needs the previous packaged executable path.');
 
 function preflight() {
   // Read GitHub directly: a stale origin/main ref is not sufficient.
@@ -46,21 +49,26 @@ const binaryProvenance = JSON.parse(fs.readFileSync('vendor/ffmpeg/provenance.js
 for (const [relative, hash] of Object.entries(binaryProvenance.binaries)) {
   if (digest(path.join('release/win-unpacked/resources/media-tools', relative)) !== hash) throw new Error(`Packaged media tool differs: ${relative}`);
 }
-run(process.execPath, ['scripts/desktop-smoke.mjs', `release/win-unpacked/${pkg.build.executableName}.exe`]);
+const installer = `release/${pkg.build.artifactName.replace('${version}', pkg.version).replace('${ext}', 'exe')}`;
+const { extractVerifiedInstaller } = await import('./installer-payload.mjs');
+const payload = await extractVerifiedInstaller(installer, 'release/win-unpacked');
+const executable = path.join(payload, `${pkg.build.executableName}.exe`);
+run(process.execPath, ['scripts/desktop-smoke.mjs', executable]);
+if (previous) run(process.execPath, ['scripts/upgrade-smoke.mjs', previous, executable]);
 run(process.execPath, ['scripts/prepare-legal.mjs', '--sources']);
 
-const installer = `release/${pkg.build.artifactName.replace('${version}', pkg.version).replace('${ext}', 'exe')}`;
 const media = JSON.parse(fs.readFileSync('media-tools.lock.json', 'utf8'));
-const files = [installer, `${installer}.blockmap`, 'release/latest.yml', `release/sources/ffmpeg-${media.version}-source.tar.gz`, 'build/legal/THIRD-PARTY-LICENSES.txt', 'build/legal/FFmpeg-build-details.txt', 'THIRD_PARTY_NOTICES.md'];
+const files = [installer, `${installer}.blockmap`, 'release/latest.yml', `release/sources/${media.sourceFile || `ffmpeg-${media.version}-source.tar.gz`}`, 'build/legal/THIRD-PARTY-LICENSES.txt', 'build/legal/FFmpeg-build-details.txt', 'THIRD_PARTY_NOTICES.md'];
 for (const file of files) if (!fs.existsSync(file)) throw new Error(`Missing release asset: ${file}`);
 verifyUpdateMetadata(fs.readFileSync('release/latest.yml', 'utf8'), pkg.version, installer);
 const checksums = Object.fromEntries(files.map(file => [path.basename(file), digest(file)]));
-const provenance = { version: pkg.version, commit: head, media, checks: ['automated tests', 'production build', 'packaged desktop smoke'], assets: checksums };
+const provenance = { version: pkg.version, commit: head, media, checks: ['automated tests', 'production build', 'installer payload checksums', 'desktop smoke from extracted installer'], assets: checksums };
+if (previous) provenance.checks.push('previous-version data upgrade smoke');
 fs.writeFileSync('release/build-provenance.json', JSON.stringify(provenance, null, 2) + '\n');
 files.push('release/build-provenance.json');
 fs.writeFileSync('release/SHA256SUMS.txt', files.map(file => `${digest(file)}  ${path.basename(file)}`).join('\n') + '\n');
 files.push('release/SHA256SUMS.txt');
-fs.writeFileSync('release/release-notes.md', `${changelog}\n\n### Install\n\nDownload **${path.basename(installer)}** below for Windows 10/11 x64. The installer is unsigned; Windows may show a SmartScreen warning. Bring your own transcription API key; provider usage is billed separately.\n\nExisting installations keep their local projects and settings. Public releases need no update token; private repositories require access.\n\n### Verification and source\n\nSHA256SUMS.txt contains the asset checksums; build-provenance.json identifies the tested commit. The FFmpeg source archive, build details and third-party notices are included below. The source archive covers FFmpeg itself; external-library versions are recorded in FFmpeg-build-details.txt.\n`);
+fs.writeFileSync('release/release-notes.md', `${changelog}\n\n### Install\n\nDownload **${path.basename(installer)}** below for Windows 10/11 x64. The installer is unsigned; Windows may show a SmartScreen warning. Bring your own transcription API key; provider usage is billed separately.\n\nExisting installations keep their local projects and settings. Public releases need no update token; private repositories require access.\n\n### Verification and source\n\nSHA256SUMS.txt contains the asset checksums; build-provenance.json identifies the tested commit. The media-tools source bundle includes the pinned FFmpeg, LAME and zlib sources, build scripts, configuration and compiler/runtime notices. Build details and third-party notices are also included below.\n`);
 
 // Fail before creating anything remotely if files changed during the build.
 const deadline = Date.now() + 10 * 60_000;

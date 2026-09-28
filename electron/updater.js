@@ -1,4 +1,4 @@
-// Self-update from GitHub Releases. Public releases need no token; a token saved in Settings is
+// Self-update from GitHub Releases. Public releases need no token; a token saved in hidden team setup is
 // used when present (a private repo, or to avoid GitHub's anonymous rate limit).
 // Updates download in the background; the UI shows "Restart to update" when one is ready.
 import { app } from 'electron';
@@ -59,8 +59,8 @@ export function createUpdater(getToken, prepareExit = async () => true) {
 
 function friendly(err) {
   const msg = String(err?.message || err);
-  if (/401|Bad credentials/i.test(msg)) return 'GitHub rejected the access token. Check it in Settings.';
-  if (/404/.test(msg)) return "Couldn't see the releases. If the repo is private, add a GitHub token with access to Video-Transcribing (Contents: read).";
+  if (/401|Bad credentials/i.test(msg)) return 'Update authentication failed. Check private update access in team setup.';
+  if (/404/.test(msg)) return "Couldn't find the update release. Try again later.";
   if (/403|rate limit/i.test(msg)) return 'GitHub is limiting update checks right now; will try again later.';
   if (/ENOTFOUND|ETIMEDOUT|ECONNRESET|net::/i.test(msg)) return 'No internet connection, will try again later.';
   return msg.split('\n')[0].slice(0, 200);

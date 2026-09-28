@@ -14,10 +14,15 @@ The package version is the source of truth for the UI, API and installer.
 5. Run `npm run release:check`. This only reads local Git and GitHub metadata.
 6. Run `npm run release`.
 
+To check an upgrade before publishing, preserve the previous unpacked app and run
+`npm run release -- --previous "release/previous/Nicos Transcriber.exe"`.
+This adds the isolated saved-data upgrade check to the release gate and provenance.
+
 The release command requires a clean working tree, local HEAD equal to GitHub's
 current `main`, matching package/lockfile versions, a changelog entry, and an
 unused version tag. It installs from the lockfile, runs tests, builds the
-installer and runs the smoke suite against the **packaged executable**. Before
+installer, extracts its payload and compares every file with the packaged app,
+then runs the smoke suite against the **extracted installer executable**. Before
 uploading, it also requires a successful **Verify** workflow for that exact commit
 (waiting up to ten minutes for CI to finish).
 
@@ -43,29 +48,35 @@ fix forward with a new patch version.
 
 ## Media tools and notices
 
-`media-tools.lock.json` pins the Windows archive, matching FFmpeg source revision
+`media-tools.lock.json` pins the Windows archive, matching media-tools source bundle
 and both archive checksums. `npm ci` installs the verified binaries into ignored
 `vendor/ffmpeg/`; the installer copies them outside `app.asar` into
-`resources/media-tools/`. To update them, inspect a maintained upstream release,
-verify its checksums, update the manifest, run `npm run media:install`, and test
-real import, FLAC extraction, voice cleanup and MP3 encoding before release.
+`resources/media-tools/`. While the repository is private, the download uses an
+authenticated GitHub CLI; public downloads need no login. CI downloads the tools
+before `npm ci`, with repository read access scoped to that download step.
+
+To update them, change the pinned inputs in `scripts/media-build/sources.json`,
+then run the **Build media tools** workflow. See its [build instructions](../scripts/media-build/README.md).
+The workflow creates a draft release with both archives and verified upload hashes.
+Download and validate them on Windows, publish that draft as a prerelease
+(not latest), and update the manifest with its URLs and hashes. Run
+`npm run media:install` and test import, FLAC extraction, voice cleanup and MP3
+encoding before releasing the app. Keep the source bundle alongside every app
+installer that distributes those binaries.
 
 `npm run legal` gathers the exact installed dependency and font license texts.
 Missing texts fail the build; versioned upstream copies for packages that omit
 their licenses live in `licenses/`. Electron supplies its own Chromium notices.
-`node scripts/prepare-legal.mjs --sources` verifies the matching FFmpeg source
-archive, which is uploaded beside the installer.
-
-The FFmpeg core archive does not include the upstream build's external libraries.
-Their source completeness remains a pre-publication item documented in
-[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md); do not describe the core archive
-as the complete source for every compiled component.
+`node scripts/prepare-legal.mjs --sources` verifies the source bundle, which is
+uploaded beside the installer. It includes FFmpeg, LAME and zlib sources plus
+build scripts, generated configuration, toolchain versions and runtime notices.
 
 ## Before the public launch
 
-- Finish the external-library source review described above.
 - Try a clean install and an upgrade from the previous release in a disposable
   Windows account or VM. Check that projects, presets and saved keys survive.
+  `node scripts/upgrade-smoke.mjs <old.exe> <new.exe>` also verifies saved-data
+  compatibility in an isolated profile; it does not exercise the NSIS wizard.
 - Transcribe a short, non-sensitive clip with each provider being advertised,
   review it and open the exported SRT in an editor. These paid calls are not part
   of the automated suite.

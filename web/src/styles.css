@@ -565,7 +565,9 @@ button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
 .terminal .cursor { display: inline-block; width: 9px; height: 16px; background: #7dffb0; vertical-align: -3px; animation: blink 0.9s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes granted { from { transform: scale(1.6); opacity: 0; } }
-.team-dialog { overflow: hidden; position: relative; }
+.team-dialog { overflow: auto; position: relative; }
+.private-updates > summary { cursor: pointer; font-weight: 700; }
+.private-updates[open] > summary { margin-bottom: 12px; }
 .ghost-link { background: transparent; border-color: transparent; box-shadow: none; color: var(--text-2); }
 .ghost-link:hover { background: var(--hover); }
 .confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }

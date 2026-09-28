@@ -5,6 +5,7 @@ ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package*.json ./
 COPY media-tools.lock.json ./
 COPY scripts/install-media-tools.mjs ./scripts/
+COPY scripts/download-release.mjs ./scripts/
 RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev

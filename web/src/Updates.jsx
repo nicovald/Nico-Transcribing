@@ -20,13 +20,14 @@ export function updateMessage(u) {
   }
 }
 
-export default function Updates() {
+export default function Updates({ privateAccess = false, onBusyChange }) {
   const { settings, reloadSettings } = useApp();
   const [update, setUpdate] = useState(null);
   const [token, setToken] = useState(settings.keys.github || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  useUnsaved(token !== settings.keys.github || busy);
+  useUnsaved((privateAccess && token !== settings.keys.github) || busy);
+  useEffect(() => setToken(settings.keys.github || ''), [settings.keys.github]);
 
   useEffect(() => {
     let stop = false;
@@ -44,9 +45,10 @@ export default function Updates() {
 
   const saveAndCheck = async () => {
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     try {
-      if (token !== settings.keys.github) {
+      if (privateAccess && token !== settings.keys.github) {
         const saved = await api.put('/api/settings', { keys: { github: token } });
         setToken(saved.keys.github);
         await reloadSettings();
@@ -54,6 +56,7 @@ export default function Updates() {
       setUpdate(await api.post('/api/update/check'));
     } catch (err) { setError(err.message); } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 
@@ -67,10 +70,10 @@ export default function Updates() {
   return (
     <section className="card">
       <div className="row">
-        <h2 className="grow">Updates</h2>
+        <h2 className="grow">{privateAccess ? 'Private repository updates' : 'Updates'}</h2>
         <span className="muted small">Version {update?.current ?? __APP_VERSION__}</span>
       </div>
-      <label>
+      {privateAccess ? <label>
         <span className="row">
           <strong className="grow">GitHub access token <span className="hint-inline">optional</span></strong>
           <a href={TOKEN_URL} target="_blank" rel="noreferrer" className="small" onClick={openLink}>Create one <Icon name="external" size={12} /></a>
@@ -92,7 +95,9 @@ export default function Updates() {
         <span className="hint">
           Public releases need no token. For a private repository, use a token with Repository access → <b>Video-Transcribing</b>, Contents → <b>Read-only</b>.
         </span>
-      </label>
+      </label> : <div>
+        <button type="button" onClick={saveAndCheck} disabled={busy || update?.status === 'checking' || update?.status === 'downloading'}>Check now</button>
+      </div>}
       <div className={`update-status ${update?.status === 'error' ? 'error-text' : ''}`}>{updateMessage(update)}</div>
       {error && <div className="error">{error}</div>}
       <p className="small"><a href="/api/licenses" download>Download open-source notices</a></p>

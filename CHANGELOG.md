@@ -2,6 +2,13 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Video-Transcribing/releases) page. Installed apps update themselves.
 
+## 0.17.2 (2026-09-27)
+- Moved optional GitHub token controls out of normal Settings into the hidden **Ctrl+Shift+T** setup. Public updates need no token.
+- Replaced the broad media-tools bundle with our own FFmpeg 9.0.2 build. Each release includes the exact FFmpeg, LAME and zlib sources, build scripts, configuration and notices. Audio import, voice cleanup, FLAC and MP3 encoding remain supported.
+- Added an isolated upgrade check for projects, settings, presets, term lists and Windows-protected API keys. Release checks can run it before publishing.
+- Release checks verify the installer's compressed files and launch the app extracted from the installer for desktop tests.
+- Windows source installs can download the verified media tools with GitHub CLI access during the private preview. Public downloads need no login.
+
 ## 0.17.1 (2026-09-27)
 - Updated the bundled FFmpeg and ffprobe tools to a matching **9.0.2** build. Downloads are pinned and checked with SHA-256; Docker uses its system media tools.
 - Added downloadable open-source notices in Settings, bundled dependency and font licenses, media-tool provenance, and the matching FFmpeg core source as a release asset.

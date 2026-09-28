@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
-import { Icon } from './shared.jsx';
+import { desktop, Icon } from './shared.jsx';
+import Updates from './Updates.jsx';
 
 // Hidden on purpose (Ctrl+Shift+T). A studio gives its editors a .env file with the API keys it pays
 // for, and optionally a settings file with its suggested setup. The first open plays a joke intro.
@@ -24,6 +25,7 @@ export default function TeamSetup({ onClose, onImported }) {
   const [shown, setShown] = useState(0);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [results, setResults] = useState([]);
   const [error, setError] = useState(null);
   const [party, setParty] = useState(0);
@@ -56,7 +58,7 @@ export default function TeamSetup({ onClose, onImported }) {
   };
 
   return (
-    <dialog ref={dialog} className="export-dialog team-dialog" aria-labelledby="team-title" onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }}>
+    <dialog ref={dialog} className="export-dialog team-dialog" aria-labelledby="team-title" onCancel={(e) => { e.preventDefault(); if (!busy && !updating) onClose(); }}>
       {intro ? (
         <div className="stack">
           <div className="terminal" role="status" aria-live="polite">
@@ -97,13 +99,17 @@ export default function TeamSetup({ onClose, onImported }) {
             </div>
           )}
           {error && <div className="error" role="alert">{error}</div>}
+          {desktop && <details className="private-updates">
+            <summary>Private repository updates</summary>
+            <Updates privateAccess onBusyChange={setUpdating} />
+          </details>}
           <div className="row wrap">
             <a className="button ghost-link" href="/api/team-setup/settings-export" download title="Subtitle layout, proofreading, term lists, presets, learned fixes and people. Never API keys.">
               <Icon name="download" /> Export my settings
             </a>
             <button className="link-btn subtle" onClick={replayIntro}>Replay intro</button>
             <span className="grow" />
-            <button className={results.length ? 'primary' : ''} disabled={busy} onClick={onClose}>{results.length ? 'Done' : 'Close'}</button>
+            <button className={results.length ? 'primary' : ''} disabled={busy || updating} onClick={onClose}>{results.length ? 'Done' : 'Close'}</button>
           </div>
         </div>
       )}

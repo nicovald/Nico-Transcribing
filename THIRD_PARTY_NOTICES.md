@@ -5,23 +5,26 @@ Bundled dependencies retain their own copyrights and licenses.
 
 ## FFmpeg and ffprobe
 
-The Windows installer includes the unmodified **FFmpeg and ffprobe 9.0.2**
-executables from [Gyan's essentials build](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2).
-Both use the same GPL v3 build. They are separate programs invoked as child
-processes; they are not part of the app's MIT license.
+The Windows installer includes **FFmpeg and ffprobe 9.0.2-nicos2**, built from
+unmodified FFmpeg sources with only LAME 3.100 and zlib 1.3.2 enabled as optional
+third-party libraries. FFmpeg uses LGPL-2.1-or-later, LAME uses LGPL-2.0-or-later,
+and zlib uses the zlib license. GPL, nonfree and version-3-only features are
+disabled. They run as separate programs and retain their own licenses.
 
 - Binary archive, source revision and SHA-256 hashes: [media-tools.lock.json](media-tools.lock.json).
 - FFmpeg source: [revision 946fcce07b6dcd0331c8cc609192aeff5e1924f8](https://github.com/FFmpeg/FFmpeg/tree/946fcce07b6dcd0331c8cc609192aeff5e1924f8).
-- Each new app release includes `ffmpeg-9.0.2-source.tar.gz`, the matching FFmpeg
-  core source archive, and `FFmpeg-build-details.txt`, the upstream build README.
-- The upstream build also includes external libraries. Their configured features
-  and versions are recorded in the build README; the core source archive does
-  **not** contain those libraries. The complete corresponding-source collection
-  for the upstream build needs to be verified before a public binary launch.
+- Each app release from 0.17.2 includes `ffmpeg-9.0.2-nicos2-source.tar.gz`: the
+  exact FFmpeg, LAME and zlib source archives, hashes, build scripts, generated
+  configuration, toolchain versions and Windows runtime notices. The compiler
+  runtime notices include the applicable GCC Runtime Library Exception.
+- Build instructions: [scripts/media-build/README.md](scripts/media-build/README.md).
+  The build runs in the **Build media tools** GitHub Actions workflow.
 - License text: `resources/media-tools/LICENSE` and
-  `resources/licenses/FFmpeg-GPL-3.0.txt` in the installed app.
+  `resources/licenses/FFmpeg-LICENSE.txt` in the installed app. LAME, zlib and
+  compiler runtime notices are in the same directory and the combined notices.
 - Build configuration: `resources/media-tools/README.txt`; exact binary hashes:
-  `resources/media-tools/provenance.json`.
+  `resources/media-tools/provenance.json`. `BUILD-PROVENANCE.json` identifies
+  the media-tools build commit separately from the app release commit.
 
 The tools live in `resources/media-tools/bin/` outside the application archive.
 You can replace them with compatible builds, or set `FFMPEG_PATH` and

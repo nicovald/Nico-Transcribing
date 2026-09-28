@@ -56,7 +56,7 @@ Use **Save line** or Enter to save an edited subtitle; Escape cancels, Shift+Ent
 
 ## Updates
 
-The installed app checks GitHub Releases on start and every 4 hours, downloads updates in the background, then shows **Restart to update**. Public repositories need no account or token. While this repository is private, use a GitHub token with access to `Video-Transcribing` and **Contents: read** in **Settings → App updates**.
+The installed app checks GitHub Releases on start and every 4 hours, downloads updates in the background, then shows **Restart to update**. Public repositories need no account or token. **Settings → App updates** has the normal update controls. Private-repository access is tucked into **Ctrl+Shift+T → Private repository updates**; use a GitHub token with access to `Video-Transcribing` and **Contents: read**, or clear that field to return to public updates.
 
 Maintainers: see [the release guide](docs/RELEASING.md). Update the version and changelog, commit and push to `main`, then run on Windows:
 
@@ -104,6 +104,11 @@ The stream-offset fix applies to newly imported audio. Reimport older source vid
 ## Development
 
 Requires Node.js 22.19+ (or a supported newer Node release). On Windows PowerShell, use `npm.cmd` if script execution policy blocks `npm.ps1`. Windows installs download the pinned FFmpeg/ffprobe pair in [media-tools.lock.json](media-tools.lock.json) and verify its SHA-256 before extraction. Linux/macOS source runs require system `ffmpeg` and `ffprobe` on PATH, or the path overrides below.
+
+While this repository is private, Windows source installs also need `gh auth login`
+with repository read access to download the media tools. Public downloads need no
+login. The matching sources and build instructions ship with each release; see
+[third-party notices](THIRD_PARTY_NOTICES.md).
 
 ```bash
 npm ci
