@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 const work = path.resolve('release/media-build');
 const output = path.join(work, 'output', 'ffmpeg-9.0.2-nicos1');
 const source = path.join(work, 'source-package');
-const read = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' });
+const read = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const config = JSON.parse(fs.readFileSync('scripts/media-build/sources.json', 'utf8'));
 const report = read('dpkg-query', ['-W', 'gcc-mingw-w64-x86-64*', 'g++-mingw-w64-x86-64*', 'mingw-w64*', 'binutils-mingw-w64-x86-64', 'nasm', 'make', 'pkg-config']);
@@ -30,12 +30,15 @@ fs.writeFileSync(path.join(output, 'TOOLCHAIN-NOTICES.txt'), compilerNotices);
 fs.writeFileSync(path.join(source, 'TOOLCHAIN-NOTICES.txt'), compilerNotices);
 fs.copyFileSync('scripts/media-build/package.mjs', path.join(source, 'package.mjs'));
 fs.copyFileSync('scripts/media-build/README.md', path.join(output, 'README.txt'));
-const provenance = { ...config, commit: read('git', ['rev-parse', 'HEAD']).trim(), binaries };
+// A standalone source-bundle rebuild does not need a Git checkout.
+let commit = null;
+try { commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch {}
+const provenance = { ...config, commit, binaries };
 fs.writeFileSync(path.join(output, 'BUILD-PROVENANCE.json'), JSON.stringify(provenance, null, 2) + '\n');
 fs.writeFileSync(path.join(source, 'BUILD-PROVENANCE.json'), JSON.stringify(provenance, null, 2) + '\n');
 fs.mkdirSync(path.join(work, 'artifacts'), { recursive: true });
 execFileSync('zip', ['-qr', path.join(work, 'artifacts', 'ffmpeg-9.0.2-nicos1-win64.zip'), 'ffmpeg-9.0.2-nicos1'], { cwd: path.join(work, 'output') });
 execFileSync('tar', ['-czf', path.join(work, 'artifacts', 'ffmpeg-9.0.2-nicos1-source.tar.gz'), '-C', work, 'source-package']);
-const checksums = fs.readdirSync(path.join(work, 'artifacts')).sort().map(name => `${hash(path.join(work, 'artifacts', name))}  ${name}`);
+const checksums = fs.readdirSync(path.join(work, 'artifacts')).filter(name => name !== 'SHA256SUMS.txt').sort().map(name => `${hash(path.join(work, 'artifacts', name))}  ${name}`);
 fs.writeFileSync(path.join(work, 'artifacts', 'SHA256SUMS.txt'), checksums.join('\n') + '\n');
 console.log(checksums.join('\n'));

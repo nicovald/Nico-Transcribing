@@ -5,7 +5,7 @@ FFmpeg and ffprobe are built from the pinned, unmodified FFmpeg 9.0.2 source in
 libraries are enabled. LAME's source archive is byte-for-byte identical to the
 upstream 3.100 tarball (also verified against the SHA-512 in vcpkg's mp3lame port).
 
-FFmpeg and LAME are LGPL-2.1-or-later; zlib uses the zlib license. License texts
+FFmpeg is LGPL-2.1-or-later; LAME is LGPL-2.0-or-later; zlib uses the zlib license. License texts
 are included. The Windows compiler runtime notices are included separately.
 These programs run as separate processes; the app itself is MIT licensed.
 
@@ -19,7 +19,9 @@ audio filters, FLAC and MP3 encoding remain available.
 
 Use Ubuntu 24.04 with Node.js 24, make, nasm, pkg-config, zip, and the MinGW-w64
 x64 GCC and G++ packages (`gcc-mingw-w64-x86-64`, `g++-mingw-w64-x86-64`).
-The exact package versions used are recorded in `toolchain.txt`.
+The exact package versions used are recorded in `toolchain.txt`. Git is optional
+for standalone source-bundle builds; without a checkout, the rebuilt provenance
+records a null commit.
 
 From a checkout of Nico's Transcriber:
 
