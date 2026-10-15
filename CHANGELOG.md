@@ -2,6 +2,11 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
 
+## 1.2.2 (2026-10-14)
+- **Review works on narrow windows and phones**: one column (transcript first, then To review and Checks), a toolbar that wraps, and readable lines. Previously the transcript was squeezed to one word per line.
+- The "No presets yet" banner stacks on narrow screens.
+- Removed a stray purple line under "Not sure" suggestions, and the Undo toast no longer covers buttons.
+
 ## 1.2.1 (2026-10-14)
 - **Fewer junk flags from Double-check.** Spelling styles ("kind of"/"kinda", "want to"/"wanna", "yeah"/"yep", "3x2"/"three by two", contractions), cut-off words ("gla-"), stray letters and "uh-huh"-only lines are no longer flagged. Tested on a real 31-minute Discord recording: a third fewer flags, with every real catch kept (sky stones, casting basin, copper, Crainer, Ian).
 

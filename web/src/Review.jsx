@@ -371,7 +371,7 @@ export default function Review({ jobId }) {
               </div>
               <div className="list-hint">
                 Click a timecode (or press Space on it) to play the line, click text to edit it.
-                {!anyConfidence && ` ${provider?.name} has no per-word confidence, so flags come from the checks on the right.`}
+                {!anyConfidence && ` ${provider?.name} has no per-word confidence, so flags come from the To review checks.`}
                 {unlikelyCount > 0 && (
                   <>
                     {' '}

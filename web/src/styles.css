@@ -460,7 +460,7 @@ mark.suspect { background: var(--gold-soft); box-shadow: inset 0 -2px 0 var(--go
 button.gold { background: var(--gold); border-color: var(--gold); color: var(--gold-text); box-shadow: 0 2px 0 var(--gold-deep); }
 button.gold:hover:not(:disabled) { background: #ffbe3d; border-color: #ffbe3d; }
 button.gold:active:not(:disabled) { box-shadow: 0 0 0 var(--gold-deep); }
-.unsure .tier-item button { color: var(--grape-text); border-color: #d6cdff; box-shadow: 0 2px 0 #d6cdff; }
+.unsure .tier-item button:not(.tier-jump) { color: var(--grape-text); border-color: #d6cdff; box-shadow: 0 2px 0 #d6cdff; }
 .small-link { font-size: 12.5px; }
 
 .dropzone { padding: 18px 22px; text-align: left; }
@@ -609,3 +609,26 @@ button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
 .missed-sug .sug-to.changed { color: var(--accent); background: var(--accent-soft); border-color: #b6cff4; }
 .tier-group.missed { background: var(--accent-soft); margin-bottom: 10px; }
 .missed .tier-head { background: var(--accent); color: #fff; }
+
+/* ---------- narrow screens: review page and presets banner (keep last so it wins) ---------- */
+.preset-empty > .grow { flex: 1 1 280px; min-width: 0; }
+.review { padding-bottom: 84px; } /* room so the undo toast never sits on the last rows */
+.toast { bottom: 16px; }
+@media (max-width: 900px) {
+  .review-layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; order: 0; }
+  .review-title .meta { flex: 1 1 100%; }
+  .toolbar .search { flex: 1 1 100%; order: 5; min-width: 0; }
+  .list-bar { flex-wrap: wrap; }
+  .list-bar .grow { display: none; }
+  .list-bar .speed { margin-left: auto; }
+  .cue-line > button.cue-text, .cue-line > div { flex: 1 1 200px; }
+}
+@media (max-width: 700px) {
+  .preset-empty { flex-direction: column; align-items: stretch; gap: 10px; }
+  .preset-empty > .grow { flex: none; }
+  .preset-empty > button { align-self: flex-start; }
+  .toolbar { gap: 6px; }
+  .toolbar select { max-width: 100%; }
+  .side-section { padding: 14px; }
+}

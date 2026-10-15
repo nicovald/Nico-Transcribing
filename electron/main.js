@@ -100,7 +100,7 @@ async function createWindow() {
   win = new BrowserWindow({
     width: Math.min(Number(process.env.SCREENSHOT_WIDTH) || saved.width || 1280, display.width),
     height: Math.min(saved.height || 900, display.height),
-    minWidth: 960,
+    minWidth: process.env.SCREENSHOT ? 320 : 960,
     minHeight: 650,
     show: !process.env.SCREENSHOT,
     title: "Nico's Transcriber",

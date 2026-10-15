@@ -49,8 +49,8 @@ jobs.writeSuggestions(job.id,[
 const fixture = {projectId:project.id,jobId:job.id,source};
 // Electron 44 downloads lazily through its Node entry point after a clean npm ci.
 const executable = process.argv[2] || (await import('electron')).default;
-async function capture(name,hash,script) {
-  const env = {...process.env,SCREENSHOT:path.join(folder,`${name}.png`),SCREENSHOT_HASH:hash,SCREENSHOT_DELAY:'800',SCREENSHOT_WIDTH:'1280'};
+async function capture(name,hash,script,width='1280') {
+  const env = {...process.env,SCREENSHOT:path.join(folder,`${name}.png`),SCREENSHOT_HASH:hash,SCREENSHOT_DELAY:'800',SCREENSHOT_WIDTH:String(width)};
   if(script) env.SCREENSHOT_JS = script; else delete env.SCREENSHOT_JS;
   delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(executable,process.argv[2]?[]:['.'],{cwd:root,windowsHide:true,env,stdio:['ignore','pipe','pipe']});
@@ -69,6 +69,8 @@ if(!disk.keys.grok.startsWith('protected:v1:') || JSON.stringify(disk).includes(
 await capture('settings','#/settings', `(async()=>{ const s=await (await fetch('/api/settings')).json(); if(!s.keys.grok.startsWith('••••'))throw new Error('Protected key did not reopen'); return {keyProtection:'passed'}; })()`);
 await capture('project',`#/projects/${project.id}`);
 await capture('project-options',`#/projects/${project.id}`,`(async()=>{ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); await sleep(500); const box=document.querySelector('.second-opinion'); if(!box) throw new Error('Double-check chooser is missing'); const on=[...box.querySelectorAll('.chip-toggle.on')].map(b=>b.textContent.trim()); if(on.length!==2) throw new Error('Expected 2 chosen services, saw '+on.length); box.scrollIntoView({block:'center'}); await sleep(300); return {secondOpinions:on}; })()`);
+await capture('review-narrow',`#/jobs/${job.id}`,`(async()=>{ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); for(let n=0;n<100&&!document.querySelector('.transcript .cue');n++) await sleep(50); await sleep(300); const root=document.scrollingElement; const wide=[root,document.body,document.querySelector('.main-scroll'),document.querySelector('main')].filter(Boolean).filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.className||e.tagName); if(wide.length) throw new Error('Horizontal overflow at 420px: '+wide.join()); const list=document.querySelector('.transcript').getBoundingClientRect().width; if(list<300) throw new Error('Transcript column is only '+Math.round(list)+'px wide'); const side=document.querySelector('.side'); if(side && side.getBoundingClientRect().top < document.querySelector('.transcript').getBoundingClientRect().top - 1) throw new Error('Panel sits above the transcript'); return {narrowReview:'passed',list}; })()`,'420');
+await capture('project-narrow',`#/projects/${project.id}`,undefined,'420');
 await capture('home','#/');
 await capture('learned','#/learned');
 await capture('updates','#/settings', fs.readFileSync(path.join(root,'scripts','desktop-smoke-updates.js'),'utf8'));
