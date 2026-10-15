@@ -186,7 +186,14 @@ export default function Settings() {
                 </option>
               ))}
             </select>
-            <span className="hint">If this one has no key, the first one that does is used.</span>
+            <span className="hint" data-testid="proofread-effective">{(() => {
+              const chosen = providers.proofreaders.find((p) => p.id === form.proofread.provider);
+              if (chosen && form.keys[chosen.keyName]) return `${chosen.name} will be used.`;
+              // Same order the server falls back in.
+              const fallback = ['claude', 'openai', 'grok'].map((id) => providers.proofreaders.find((p) => p.id === id)).find((p) => p && form.keys[p.keyName]);
+              if (!fallback) return 'No proofreading service has a key yet. Add one in Settings to turn proofreading on.';
+              return `No key for ${chosen?.name ?? 'this service'}, so ${fallback.name} will be used.`;
+            })()}</span>
           </label>
           <ModelPicker
             proofreader={providers.proofreaders.find((p) => p.id === form.proofread.provider)}

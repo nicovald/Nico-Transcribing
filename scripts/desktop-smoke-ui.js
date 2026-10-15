@@ -35,8 +35,21 @@
   assert(document.querySelectorAll('.cue').length===100,'Long transcripts render one page at a time');
   assert(document.querySelector('.cue.missed-line')?.textContent.includes('Possibly missed'),'Missed lines from a second opinion show in the transcript');
   assert([...document.querySelectorAll('.tier-item')].some(i=>i.textContent.includes('Starter House')&&i.textContent.includes('2 services')),'A fix two services agree on shows a 2 services badge');
-  button('Next page').click(); await sleep(100);
+  assert(getComputedStyle(document.querySelector('.tier-item .edited')).whiteSpace==='nowrap','The "2 services" badge never wraps');
+  const pagination = () => document.querySelector('.pagination .grow').textContent;
+  assert(pagination().includes('of 120')&&pagination().includes('+ 1 suggested')&&!pagination().includes('121'),'Page counts only count real lines: '+pagination());
+  const scrollBox = document.querySelector('.main-scroll'); // the desktop window scrolls this, not the page
+  scrollBox.scrollTop = scrollBox.scrollHeight; await sleep(100);
+  button('Next page').click(); await sleep(250);
   assert(document.querySelectorAll('.cue').length===21,'Transcript pagination reaches remaining lines (120 lines + 1 missed)');
+  assert(pagination().trim()==='Lines 100–120 of 120','Last page numbers real lines: '+pagination());
+  const bar = document.querySelector('.transcript .toolbar').getBoundingClientRect(), firstRow = document.querySelector('.cues > li').getBoundingClientRect();
+  assert(firstRow.top >= bar.bottom - 1 && firstRow.top < bar.bottom + 40,'Next page shows its first row just under the toolbar');
+  scrollBox.scrollTop = 400; await sleep(100);
+  assert(scrollBox.scrollTop > 0,'Test page was scrolled before navigating');
+  location.hash = '#/settings'; await sleep(400);
+  assert(scrollBox.scrollTop === 0,'Opening another page starts at the top, not at the previous page offset');
+  location.hash = `#/jobs/${fixture.jobId}`; await until(()=>document.querySelector('.cue-text')); await sleep(200);
   button('Previous page').click(); await sleep(100);
   const first = document.querySelector('.cue-text'); const original = first.textContent;
   first.click(); await sleep(50);

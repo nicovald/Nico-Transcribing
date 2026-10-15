@@ -127,6 +127,18 @@ test('adding a missed line inserts it in time order and undo removes it', () => 
   assert.equal(back.suggestions[0].status, 'open');
 });
 
+test('undoing an added missed line brings back the wording the user typed', () => {
+  const cues = [{ id: '0-0', track: 0, start: 0, end: 1, text: 'Hello there.', words: [] }, { id: '0-1', track: 0, start: 10, end: 11, text: 'Bye.', words: [] }];
+  const line = { id: 'l', kind: 'insert-line', cueId: null, track: 0, start: 4, end: 5.6, text: 'Watch out behind you', from: '', to: 'Watch out behind you', source: 'compare', status: 'open' };
+  const job = seedJob(cues, [line]);
+  acceptSuggestion(job.id, 'l', { to: 'Watch out behind us' });
+  undo(job.id);
+  const back = readTranscript(job.id).suggestions[0];
+  assert.equal(back.status, 'open');
+  assert.equal(back.draft, 'Watch out behind us');
+  assert.equal(back.text, 'Watch out behind you');
+});
+
 test('proofread keeps the parts that worked when one part keeps failing', async () => {
   const text = (i) => (i === 5 ? 'More couples stone' : i === 200 ? 'Fire break here' : `Line ${i}`);
   const cues = Array.from({ length: 320 }, (_, i) => ({ id: `0-${i}`, track: 0, start: i, end: i + 0.9, text: text(i), words: [] }));

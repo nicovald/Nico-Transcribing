@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 // Bridge exposed by the Electron preload script; absent when running in a normal browser.
 export const desktop = window.desktop ?? null;
+// The element that actually scrolls the page: our own column in the desktop window, the document in a browser.
+export const scroller = () => (desktop && document.querySelector('.main-scroll')) || document.scrollingElement || document.documentElement;
 
 export const LANGUAGES = [
   ['en', 'English'],

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
 import { useApp } from './App.jsx';
-import { desktop, Icon, Progress, StatusPill } from './shared.jsx';
+import { desktop, Icon, Progress, scroller, StatusPill } from './shared.jsx';
 import usePoll from './usePoll.js';
 import useUnsaved from './useUnsaved.js';
 import ExportDialog from './ExportDialog.jsx';
@@ -130,6 +130,16 @@ export default function Review({ jobId }) {
   useEffect(() => setPage(0), [trackFilter, show, search]);
   useEffect(() => setPage(p => Math.min(p,Math.max(0,Math.ceil(cues.length/100)-1))), [cues.length]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+  // Next/Previous page: show the first row of the new page just under the sticky toolbar.
+  const pageScroll = useRef(false);
+  const goPage = (n) => { pageScroll.current = true; setPage(n); };
+  useEffect(() => {
+    if (!pageScroll.current) return;
+    pageScroll.current = false;
+    const row = document.querySelector('.transcript .cues > li'), bar = document.querySelector('.transcript .toolbar');
+    if (!row) return;
+    scroller().scrollBy(0, row.getBoundingClientRect().top - (bar ? bar.getBoundingClientRect().bottom : 0) - 4);
+  }, [page]);
   const jumpTo = (cueId) => {
     if (editingCue) return;
     const index = cues.findIndex((c) => c.id === cueId);
@@ -143,6 +153,16 @@ export default function Review({ jobId }) {
     setPage(Math.floor(index / 100)); setSelected(cueId);
     requestAnimationFrame(() => { const row = document.getElementById(`cue-${cueId}`); row?.scrollIntoView({ block: 'center' }); row?.querySelector('.tc')?.focus({ preventScroll: true }); });
   };
+  // Line numbers count real transcript lines; "possibly missed" suggestion rows only add a note.
+  const pageRange = useMemo(() => {
+    const isLineRow = (c) => !c.missed;
+    const before = cues.slice(0, page * 100).filter(isLineRow).length;
+    const rows = cues.slice(page * 100, (page + 1) * 100);
+    const here = rows.filter(isLineRow).length, suggested = rows.length - here;
+    const total = cues.filter(isLineRow).length;
+    const extra = suggested ? ` + ${suggested} suggested` : '';
+    return here ? `Lines ${before + 1}–${before + here} of ${total}${extra}` : `${plural(suggested, 'suggested line')} (${total} lines in all)`;
+  }, [cues, page]);
   const jumpIssue = direction => {
     if (editingCue) return;
     const current = cues.findIndex(c => c.id === selected);
@@ -423,7 +443,7 @@ export default function Review({ jobId }) {
                   />
                 ))}
               </ul>
-              {cues.length > 100 && <div className="row pagination"><button disabled={Boolean(editingCue) || page === 0} onClick={() => setPage(p => p - 1)}>Previous page</button><span className="grow muted">Lines {page * 100 + 1}–{Math.min((page+1)*100,cues.length)} of {cues.length}</span><button disabled={Boolean(editingCue) || (page+1)*100 >= cues.length} onClick={() => setPage(p => p + 1)}>Next page</button></div>}
+              {cues.length > 100 && <div className="row pagination"><button disabled={Boolean(editingCue) || page === 0} onClick={() => goPage(page - 1)}>Previous page</button><span className="grow muted">{pageRange}</span><button disabled={Boolean(editingCue) || (page+1)*100 >= cues.length} onClick={() => goPage(page + 1)}>Next page</button></div>}
               {!cues.length && <p className="empty">{show === 'issues' ? 'Nothing left to look at.' : 'No lines match.'}</p>}
             </>
           ) : (
@@ -744,7 +764,7 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
 
 // Words the second opinion heard where this transcript has no line. Add makes it a real line (undoable).
 function MissedRow({ s, label, color, pending, selected, playing, onSelect, onPlay, onAccept, onDismiss }) {
-  const [text, setText] = useState(s.text);
+  const [text, setText] = useState(s.draft ?? s.text);
   const edited = text.trim() !== s.text;
   return (
     <li id={`cue-${s.id}`} onFocus={onSelect} className={`cue missed-line ${playing ? 'playing' : ''} ${selected ? 'selected-cue' : ''}`}>

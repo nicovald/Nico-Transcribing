@@ -2,6 +2,14 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
 
+## 1.2.3 (2026-10-14)
+- Pages now open at the top instead of keeping the previous page's scroll position; Projects, Settings and Learned fixes remember their own.
+- **Next page** in Review starts at the first line of the new page.
+- Line counts no longer include suggested missed lines ("Lines 1–99 of 120 + 1 suggested").
+- Undoing **Add line** keeps the wording you typed.
+- Proofreading settings say which service will actually be used when the chosen one has no key.
+- Narrow windows: the sidebar shows just the logo, and the "2 services" badge stays on one line.
+
 ## 1.2.2 (2026-10-14)
 - **Review works on narrow windows and phones**: one column (transcript first, then To review and Checks), a toolbar that wraps, and readable lines. Previously the transcript was squeezed to one word per line.
 - The "No presets yet" banner stacks on narrow screens.

@@ -676,6 +676,13 @@ const trackDuration = (job, pos) => {
 function acceptLine(jobId, s, to) {
   const text = to?.trim() || s.text;
   const job = store.getJob(jobId);
+  // Keep the wording the user typed on the suggestion first, so Undo (which restores the suggestion
+  // as it was just before Add) brings the row back with their edited text.
+  updateTranscript(jobId, state => {
+    const x = state.suggestions.find(v => v.id === s.id && v.status === 'open');
+    if (!x) return;
+    if (text !== x.text) x.draft = text; else delete x.draft;
+  });
   const { state, result: created } = updateTranscript(jobId, state => {
     const x = state.suggestions.find(v => v.id === s.id && v.status === 'open');
     if (!x) throw new Error('This suggestion is no longer available.');

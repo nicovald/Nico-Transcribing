@@ -90,7 +90,7 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
 
 /* Sidebar: brand, colorful nav tiles, recent projects, activity + version. */
 .sidebar {
-  width: 236px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; z-index: 20;
+  width: 236px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; overflow-x: hidden; z-index: 20;
   display: flex; flex-direction: column; gap: 22px; padding: 20px 14px 16px;
   background: var(--surface); border-right: 1px solid var(--line);
 }
@@ -308,7 +308,7 @@ textarea.drop-over { border-color: var(--accent); background: var(--accent-soft)
 .cue-text { font-size: 15px; font-weight: 500; line-height: 1.55; cursor: text; border-radius: 6px; padding: 0 6px; margin: 0 -6px; }
 .cue-text:hover { background: #fff; box-shadow: 0 0 0 1px var(--line); }
 .cue-edit { font-size: 15px; padding: 6px 10px; }
-.edited { color: var(--green); background: var(--green-soft); font-size: 11px; font-weight: 700; margin-left: 8px; padding: 1px 7px; border-radius: 999px; vertical-align: 1px; }
+.edited { white-space: nowrap; color: var(--green); background: var(--green-soft); font-size: 11px; font-weight: 700; margin-left: 8px; padding: 1px 7px; border-radius: 999px; vertical-align: 1px; }
 .cue-actions { display: flex; gap: 2px; align-self: start; opacity: 0; }
 .cue:hover .cue-actions { opacity: 1; }
 mark.suspect { background: var(--warn-soft); color: inherit; border-radius: 4px; box-shadow: inset 0 -2px 0 var(--warn); padding: 0 2px; }
@@ -510,11 +510,13 @@ button.gold:active:not(:disabled) { box-shadow: 0 0 0 var(--gold-deep); }
 .cue-line > button.cue-text, .cue-line > div { flex: 1 1 260px; }
 @media (min-width: 821px) and (max-width: 1100px) {
   .sidebar { width: 76px; padding: 18px 10px; align-items: center; }
-  .brand { font-size: 0; gap: 0; padding: 0; }
+  .sidebar { overflow-x: hidden; }
+  .brand { gap: 0; padding: 0; }
+  .brand-name, .foot-extra { display: none; }
   .sidebar nav a { font-size: 0; gap: 0; padding: 5px; }
   .sidebar nav .dot { left: 30px; }
   .recent { display: none; }
-  .sidebar-foot { font-size: 10.5px; text-align: center; padding: 0; }
+  .sidebar-foot { font-size: 10.5px; text-align: center; padding: 0; white-space: nowrap; }
 }
 
 .team-dialog { width: min(560px, 90vw); }

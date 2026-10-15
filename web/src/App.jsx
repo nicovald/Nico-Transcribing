@@ -1,4 +1,4 @@
-import { Component, createContext, useContext, useEffect, useState } from 'react';
+import { Component, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, uploadFile } from './api.js';
 import Home from './Home.jsx';
 import Learned from './Learned.jsx';
@@ -7,7 +7,7 @@ import Review from './Review.jsx';
 import Settings from './Settings.jsx';
 import TeamSetup from './TeamSetup.jsx';
 import { updateMessage } from './Updates.jsx';
-import { desktop, Icon, Logo, Progress } from './shared.jsx';
+import { desktop, Icon, Logo, Progress, scroller } from './shared.jsx';
 
 // Tiny hash router: #/, #/projects/<id>, #/jobs/<id>, #/learned, #/settings
 function useRoute() {
@@ -124,6 +124,24 @@ export default function App() {
   };
 
   const section = route[0] || 'home';
+
+  // Each page starts at the top, except Home/Settings/Learned (kept mounted) which go back to where
+  // they were. The scrolling box is .main-scroll in the desktop window and the page itself in a browser.
+  const scrollMemory = useRef({});
+  const scrollKey = useRef(null);
+  const keptPage = ['home', 'settings', 'learned'].includes(section) ? section : null;
+  useLayoutEffect(() => {
+    scrollKey.current = keptPage;
+    scroller().scrollTo(0, (keptPage && scrollMemory.current[keptPage]) || 0);
+  }, [route.join('/')]);
+  useEffect(() => {
+    const onScroll = (e) => {
+      const el = scroller();
+      if (scrollKey.current && (e.target === el || e.target === document)) scrollMemory.current[scrollKey.current] = el.scrollTop;
+    };
+    document.addEventListener('scroll', onScroll, true);
+    return () => document.removeEventListener('scroll', onScroll, true);
+  }, []);
   const ctx = { providers, settings, reloadSettings: loadSettings, addFiles, addPaths, dataVersion, bumpData };
   const noKeys = settings && !providers.transcribers.some(p => settings.keys[p.id]);
   const activeCount = activity ? activity.jobs + activity.imports + activity.checks : 0;
@@ -133,7 +151,7 @@ export default function App() {
       <div className={desktop ? 'app desktop-frame' : 'app'}>
         <aside className="sidebar">
           <a className="brand" href="#/">
-            <Logo /> Nico's Transcriber
+            <Logo /> <span className="brand-name">Nico's Transcriber</span>
           </a>
           <nav>
             <a className={`nav-projects ${section === 'home' || section === 'projects' || section === 'jobs' ? 'active' : ''}`} href="#/" title="Projects">
@@ -156,7 +174,7 @@ export default function App() {
           )}
           <div className="sidebar-foot">
             <span className="app-activity" role="status">{activeCount ? <><span className="spinner" /> {activeCount} task{activeCount === 1 ? '' : 's'} running</> : null}</span>
-            <span>v{__APP_VERSION__} · {desktop ? 'Windows desktop' : 'Browser'}</span>
+            <span>v{__APP_VERSION__}<span className="foot-extra"> · {desktop ? 'Windows desktop' : 'Browser'}</span></span>
           </div>
         </aside>
         <div className="main-col">
