@@ -2,6 +2,9 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
 
+## 1.2.1 (2026-10-14)
+- **Fewer junk flags from Double-check.** Spelling styles ("kind of"/"kinda", "want to"/"wanna", "yeah"/"yep", "3x2"/"three by two", contractions), cut-off words ("gla-"), stray letters and "uh-huh"-only lines are no longer flagged. Tested on a real 31-minute Discord recording: a third fewer flags, with every real catch kept (sky stones, casting basin, copper, Crainer, Ian).
+
 ## 1.2.0 (2026-10-14)
 - **Double-check with other services**: pick one or more extra services (ElevenLabs Scribe, AssemblyAI, Deepgram, OpenAI) and every transcript is automatically checked against them. Anywhere they disagree, or one hears words the others missed, gets flagged. This catches mistakes no term list or proofread would find. Off by default; each chosen service adds its own cost.
 - When two or more services agree on a fix, it says so ("2 services") and is sorted to the top.

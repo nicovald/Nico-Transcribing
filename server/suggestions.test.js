@@ -342,3 +342,54 @@ test('an insertion into one line is not turned into a correction of the next lin
   const found = compareWords(cues, { 0: [w('Go', 0, 0.6), w('now', 0.65, 0.9)] }, 'X');
   assert.deepEqual(found.map((f) => `${f.from} -> ${f.to}`), ['Go -> Go now']);
 });
+
+// ---- noise filters: spelling variants, cut-off words, fillers
+const mk = (text, t0 = 0) => {
+  const ws = text.split(' ').map((x, i) => w(x, t0 + i * 0.5, t0 + i * 0.5 + 0.4));
+  return { id: 'n-' + text.length, track: 0, start: t0, end: t0 + ws.length * 0.5, text, words: ws };
+};
+const seq = (text, t0 = 0) => text.split(' ').map((x, i) => w(x, t0 + i * 0.5, t0 + i * 0.5 + 0.4));
+const cmp = (ours, theirs) => compareWords([mk(ours)], { 0: seq(theirs) }, 'X');
+
+test('compareWords ignores informal spellings, contractions and number formats', () => {
+  for (const [a, b] of [
+    ['it was kind of big', 'it was kinda big'], ['we want to go now', 'we wanna go now'],
+    ['we are going to win', 'we are gonna win'], ['I got to leave', 'I gotta leave'],
+    ['the freaking door', 'the fricking door'], ['yeah that works', 'yep that works'],
+    ['alright let us start', 'all right let us start'], ['what is it for', "what's it for"],
+    ['a 3x2 grid here', 'a three by two grid here'], ['we need 5 more bars', 'we need five more bars'],
+    ['I am going to look', "I'ma look"],
+  ]) assert.deepEqual(cmp(a, b), [], `${a} / ${b}`);
+});
+
+test('compareWords still flags real word changes next to a spelling variant', () => {
+  const found = cmp('it was kind of green', 'it was kinda grin');
+  assert.equal(found.length, 1);
+  assert.match(found[0].from, /green/);
+});
+
+test('compareWords ignores cut-off words and stray fragments', () => {
+  assert.deepEqual(cmp('we need chill vibes', 'we need ch vibes'), []);
+  assert.deepEqual(cmp('a new product here', 'a new pro- here'), []);
+  assert.deepEqual(cmp('so we go home', 'so we sl go home'), []);
+  assert.deepEqual(cmp('so we go home', 'so we h uh go home'), []);
+});
+
+test('compareWords keeps real short words and different words', () => {
+  assert.equal(cmp('oh gosh almost died', 'oh gosh I almost died').length, 1);
+  assert.equal(cmp('I like sky scones', 'I like sky stones').length, 1);
+  assert.equal(cmp('he said your name', "he said you're name").length, 1);
+});
+
+test('compareWords ignores filler or backchannel swapped for filler', () => {
+  assert.deepEqual(cmp('okay so yeah then', 'okay so uh-huh yep then'), []);
+  assert.deepEqual(cmp('right so um then', 'right so uh then'), []);
+});
+
+test('missing lines need two real words, not fillers or cut-off fragments', () => {
+  const run = (text) => compareWords([mk('hello there friend', 0)], { 0: [...seq('hello there friend', 0), ...seq(text, 20)] }, 'X').filter((s) => s.kind === 'insert-line');
+  assert.equal(run('It ki-').length, 0);
+  assert.equal(run('Uh-huh. Uh-huh.').length, 0);
+  assert.equal(run('Chest, uh-huh.').length, 0);
+  assert.equal(run('I did not see it').length, 1);
+});

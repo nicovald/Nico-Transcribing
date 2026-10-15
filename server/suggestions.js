@@ -17,6 +17,7 @@
 import { providers } from './providers/index.js';
 import { request } from './providers/http.js';
 import { lockPhrase, occurrenceFor, overlapsLocked, phraseRegex, phraseRanges, rebaseSuggestion, replaceKnownRanges, replaceRanges, suggestionRange, textTokens, updateTranscript } from './transcript.js';
+import { FILLERS, isFillerWord, isFillerText, isFragment, isTruncation, realWords, sameWords } from './equivalents.js';
 import { buildCues, joinWords } from './srt.js';
 import { modelFor, pickProofreader } from './proofreaders.js';
 import * as store from './store.js';
@@ -65,8 +66,8 @@ function lcsPairs(a, b) {
 }
 
 // Words one service drops and the other keeps all the time; never worth a flag on their own.
-const FILLERS = new Set('um umm uh uhh uhm er erm ah eh oh hm hmm mm mhm like yeah'.split(' '));
-const isFiller = (w) => FILLERS.has(norm(w.text));
+// (FILLERS and the spelling/fragment rules live in equivalents.js.)
+const isFiller = (w) => isFillerWord(w.text);
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // The words of a cue as they read NOW (edits included), with character offsets in cue.text.
@@ -152,7 +153,10 @@ export function compareWords(cues, otherWordsByTrack, otherLabel) {
         // They heard extra words inside this line. At the edges keep only words centred in the line.
         if (edge) bGap = bGap.filter((w) => { const c = (w.start + w.end) / 2; return c >= cue.start && c <= cue.end; });
         bGap.forEach((w) => matched.add(w));
-        if (!bGap.length || bGap.every(isFiller)) continue;
+        // Cut-off fragments ("sl", "h", "C") are not words the other service heard.
+        const cutOff = bGap.some((w) => isFragment(w.text));
+        bGap = bGap.filter((w) => !isFragment(w.text));
+        if (!bGap.length || bGap.every(isFiller) || (cutOff && bGap.length < 2)) continue; // what is left of a stutter is not a word
         const left = ai >= 0 ? ours[ai] : null;
         const right = aj < ours.length ? ours[aj] : null;
         // "I I think": a repeated neighbour is a stutter, not a missing word.
@@ -179,6 +183,8 @@ export function compareWords(cues, otherWordsByTrack, otherLabel) {
       if (!from || !to) continue;
       // "cobble stone" vs "cobblestone", "OK" vs "okay"-level noise is not worth a flag.
       if (norm(from.replace(/\s/g, '')) === norm(to.replace(/\s/g, ''))) continue;
+      // Same words spelled differently (kinda / kind of, what's / what is, 3 / three), a cut-off word, or filler swapped for filler.
+      if (sameWords(from, to) || isTruncation(from, to) || (isFillerText(from) && isFillerText(to))) continue;
       if (/^\p{Lu}/u.test(from) && /^\p{Ll}/u.test(to)) to = capitalize(to);
       push(from, to, ai + 1, { heard: to, reason: `${otherLabel} heard "${to}"` });
     }
@@ -206,7 +212,7 @@ export function missingLines(cues, otherWordsByTrack, otherLabel, matched = new 
       run.push(w);
     }
     for (const r of runs) {
-      if (r.filter((w) => !isFiller(w)).length < 2) continue;
+      if (realWords(r).length < 2) continue; // fillers and cut-off fragments ("It ki-") do not make a line
       const text = capitalize(r.map((w) => w.text.trim()).join(' ').replace(/\s+/g, ' ').trim());
       const start = r[0].start, end = Math.max(...r.map((w) => w.end)); // a long word can end after a later one
       if (!text || end <= start) continue;
