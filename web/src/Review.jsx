@@ -10,7 +10,7 @@ import JobSteps, { showSteps, trackStepText } from './JobSteps.jsx';
 const TRACK_COLORS = ['#126ce0', '#e0701a', '#1a9e5c', '#8b4fd8', '#c99a0a', '#0f9bb0', '#d6407a', '#5b6b7d'];
 const trackColor = (i) => TRACK_COLORS[i % TRACK_COLORS.length];
 const running = (x) => x?.status === 'running' || x?.status === 'queued';
-const isActive = (j) => running(j) || running(j.proofread) || running(j.compare) || running(j.glossary) || running(j.memory);
+const isActive = (j) => running(j) || running(j.proofread) || Object.values(j.compares || {}).some(running) || running(j.glossary) || running(j.memory);
 const TIER_LABEL = { usual: 'Usually this', unsure: 'Not sure' };
 const fixKey = (s) => [s.from, s.to].map((v) => v.trim().replace(/\s+/g, ' ').toLowerCase()).join('|');
 // Jev strongly disagreeing (<15%) almost always means a junk suggestion; tuck those away.
@@ -22,6 +22,7 @@ const initials = (label = '') => {
   const words = label.replace(/(mic|track|audio|cam)/gi, '').trim().split(/s+/).filter(Boolean);
   return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || '?').slice(0, 2)).toUpperCase();
 };
+const AgreeBadge = ({ n }) => <span className="edited" title="Several services heard the same thing, so this is more likely right">{n} services</span>;
 const sourceName = (s) => (s.source === 'ai' ? 'AI proofread' : s.source === 'glossary' ? 'Glossary' : s.sourceLabel);
 
 // "1:14.9" / "1:02:03.4" for the timecode column.
@@ -67,7 +68,7 @@ export default function Review({ jobId }) {
   const unlikelyCount = (job?.suggestions ?? []).filter((s) => s.status === 'open' && unlikely(s)).length;
   // Lines the second opinion heard where this transcript has none ("Possibly missed").
   const missedLines = useMemo(
-    () => (job?.suggestions ?? []).filter((s) => s.status === 'open' && s.kind === 'insert-line').map((s) => ({ ...s, missed: true })),
+    () => (job?.suggestions ?? []).filter((s) => s.status === 'open' && s.kind === 'insert-line').map((s) => ({ ...s, missed: true })).sort((a, b) => (b.agree || 1) - (a.agree || 1) || a.start - b.start),
     [job],
   );
   const openSuggestions = useMemo(() => {
@@ -85,12 +86,13 @@ export default function Review({ jobId }) {
     for (const list of openSuggestions.values()) {
       for (const s of list) {
         const key = fixKey(s);
-        if (!groups.has(key)) groups.set(key, { key, first: s, cueIds: new Set(), count: 0, tier: s.tier === 'usual' ? 'usual' : 'unsure' });
+        if (!groups.has(key)) groups.set(key, { key, first: s, cueIds: new Set(), count: 0, agree: 1, tier: s.tier === 'usual' ? 'usual' : 'unsure' });
+        groups.get(key).agree = Math.max(groups.get(key).agree, s.agree || 1);
         groups.get(key).cueIds.add(s.cueId);
         groups.get(key).count++; // a line can hold several matches of the same fix
       }
     }
-    return [...groups.values()].sort((a, b) => (a.tier === b.tier ? b.cueIds.size - a.cueIds.size : a.tier === 'usual' ? -1 : 1));
+    return [...groups.values()].sort((a, b) => (a.tier === b.tier ? b.agree - a.agree || b.cueIds.size - a.cueIds.size : a.tier === 'usual' ? -1 : 1));
   }, [openSuggestions]);
   const lowConfidence = (c) => !c.missed && !c.edited && !c.reviewed && c.words?.some((w) => w.confidence != null && w.confidence < threshold);
   const hasIssue = (c) => c.missed || openSuggestions.has(c.id) || lowConfidence(c);
@@ -281,7 +283,9 @@ export default function Review({ jobId }) {
 
   const srtUrl = (f) => `/api/jobs/${job.id}/srt?file=${encodeURIComponent(f.key)}${f.merged && !labels ? '&labels=0' : ''}`;
   const canSaveNext = files.some((f) => f.canSaveNextToVideo);
-  const checking = ['done','partial'].includes(job.status) && (running(job.glossary) || running(job.proofread) || running(job.compare));
+  const compareEntries = Object.values(job.compares || {});
+  const comparing = compareEntries.some(running);
+  const checking = ['done','partial'].includes(job.status) && (running(job.glossary) || running(job.proofread) || comparing);
 
   return (
     <div className="review">
@@ -312,10 +316,10 @@ export default function Review({ jobId }) {
             </div>
           ))}
         </div>
-        {(running(job) || job.tracks.some((t) => t.status === 'error')) && (
+        {(running(job) || comparing || job.tracks.some((t) => t.status === 'error')) && (
           <div className="row">
-            {running(job) && <button onClick={() => act(() => api.post(`/api/jobs/${job.id}/cancel`))}>Cancel</button>}
-            {!running(job) && (
+            {(running(job) || comparing) && <button onClick={() => act(() => api.post(`/api/jobs/${job.id}/cancel`))}>Cancel</button>}
+            {!running(job) && !comparing && (
               <button onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/retry`); refresh(); })}>Retry failed tracks</button>
             )}
           </div>
@@ -441,7 +445,7 @@ export default function Review({ jobId }) {
                     <div key={s.id} className="tier-item">
                       <button className="link-btn tier-jump" title="Show where" onClick={() => jumpTo(s.id)}>
                         <span className="tier-fix">"{s.text}"</span>
-                        <span className="tier-meta">at {timecode(s.start)}{job.tracks.length > 1 ? ` · ${trackName(s.track)}` : ''} · {s.sourceLabel} heard it</span>
+                        <span className="tier-meta">at {timecode(s.start)}{job.tracks.length > 1 ? ` · ${trackName(s.track)}` : ''} · {s.sourceLabel} heard it{s.agree > 1 && <AgreeBadge n={s.agree} />}</span>
                       </button>
                       <button className="small" disabled={pending || Boolean(editingCue)} onClick={() => accept(s, false)}>Add</button>
                     </div>
@@ -463,7 +467,7 @@ export default function Review({ jobId }) {
                         <div key={g.key} className="tier-item">
                           <button className="link-btn tier-jump" title="Show the line" onClick={() => jumpTo([...g.cueIds][0])}>
                             <span className="tier-fix">{g.first.from} → {g.first.to}</span>
-                            <span className="tier-meta">{plural(g.cueIds.size, 'line')} · {g.first.source === 'learned' || g.first.source === 'people' ? g.first.reason : sourceName(g.first)}</span>
+                            <span className="tier-meta">{plural(g.cueIds.size, 'line')} · {g.first.source === 'learned' || g.first.source === 'people' ? g.first.reason : sourceName(g.first)}{g.agree > 1 && <AgreeBadge n={g.agree} />}</span>
                           </button>
                           <button className={tier === 'usual' ? 'small gold' : 'small'} disabled={pending || Boolean(editingCue)} onClick={() => accept(g.first, g.count > 1)}>
                             {g.count > 1 ? `Fix all ${g.count}` : 'Fix'}
@@ -559,27 +563,42 @@ export default function Review({ jobId }) {
                 <div className="check-head">
                   <span>Second opinion</span>
                 </div>
-                <p>
-                  {running(job.compare)
-                    ? job.compareJob?.status === 'running'
-                      ? `Transcribing with ${providers.transcribers.find((p) => p.id === job.compare.provider)?.name}…`
-                      : 'Comparing…'
-                    : job.compare?.status === 'done'
-                      ? `${plural(job.compare.count, 'place')} where ${providers.transcribers.find((p) => p.id === job.compare.provider)?.name} heard something else.`
-                      : job.compare?.status === 'error'
-                        ? <span className="error-text">{job.compare.error}</span>
-                        : 'Transcribe again with another service and flag disagreements.'}
-                </p>
+                {compareEntries.length === 0 && <p>Transcribe again with another service and flag disagreements.</p>}
+                {compareEntries.map((c) => {
+                  const name = providers.transcribers.find((p) => p.id === c.provider)?.name || c.provider;
+                  const childRunning = job.compareJobs?.[c.provider]?.status === 'running';
+                  const retryable = ['partial', 'error', 'cancelled'].includes(c.status) && c.jobId;
+                  return (
+                    <div key={c.provider} className="compare-line">
+                      <p>
+                        <b>{name}</b>{': '}
+                        {running(c)
+                          ? childRunning ? `${c.auto ? 'Double-checking' : 'Transcribing'}…` : 'Comparing…'
+                          : c.status === 'done'
+                            ? `${plural(c.count, 'place')} where it heard something else.`
+                            : c.status === 'partial'
+                              ? <><span className="error-text">{c.error}</span>{` ${plural(c.count, 'place')} found on the tracks it did check.`}</>
+                              : <span className="error-text">{c.error}</span>}
+                      </p>
+                      {retryable && (
+                        <button className="small" disabled={comparing || running(job)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/compare/retry`, { provider: c.provider }); refresh(); })}>
+                          {c.status === 'partial' ? 'Retry unchecked tracks' : 'Retry'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {comparing && <button className="small" onClick={() => act(() => api.post(`/api/jobs/${job.id}/cancel`))}>Cancel</button>}
                 <div className="row">
-                  <select className="grow" value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={running(job.compare)}>
-                    <option value="">Service…</option>
+                  <select className="grow" value={compareWith} onChange={(e) => setCompareWith(e.target.value)}>
+                    <option value="">{compareEntries.length ? 'Add another service…' : 'Service…'}</option>
                     {providers.transcribers
                       .filter((p) => p.id !== job.provider && settings.keys[p.id])
                       .map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                        <option key={p.id} value={p.id} disabled={running(job.compares?.[p.id])}>{p.name}{job.compares?.[p.id] ? ' (run again)' : ''}</option>
                       ))}
                   </select>
-                  <button disabled={!compareWith || running(job.compare)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/compare`, { provider: compareWith }); refresh(); })}>
+                  <button disabled={!compareWith || running(job.compares?.[compareWith]) || running(job)} onClick={() => act(async () => { await api.post(`/api/jobs/${job.id}/compare`, { provider: compareWith }); setCompareWith(''); refresh(); })}>
                     Run
                   </button>
                 </div>

@@ -16,6 +16,7 @@ const blank = (settings) => ({
   diarize: false,
   fillerWords: false,
   speechSensitivity: 'normal',
+  secondOpinions: [],
   tracks: [],
 });
 
@@ -31,6 +32,42 @@ export function SpeechSensitivity({ value, onChange }) {
       </select>
       <span className="hint">Grok only. Higher settings catch quieter talking but may add stray words from background noise.</span>
     </label>
+  );
+}
+
+// The chosen "Double-check with" services; understands the older single `secondOpinion` string too.
+export const chosenOpinions = (o) => [...new Set((Array.isArray(o?.secondOpinions) ? o.secondOpinions : [o?.secondOpinion]).filter(Boolean))]; // an explicit list beats the old single string
+
+// Automatic second opinions: every chosen service transcribes too and every disagreement is flagged.
+export function SecondOpinion({ value, onChange, primary, providers, keys }) {
+  const others = providers.filter((p) => p.id !== primary);
+  const chosen = chosenOpinions({ secondOpinions: value }).filter((id) => others.some((p) => p.id === id));
+  const toggle = (id) => onChange(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id]);
+  const noKey = others.filter((p) => !keys[p.id]);
+  const missingKey = chosen.map((id) => others.find((p) => p.id === id)).filter((p) => p && !keys[p.id]);
+  return (
+    <div className="second-opinion">
+      <div className="label-like">
+        Double-check with <span className="hint-inline">{chosen.length ? `${chosen.length} chosen` : 'Off'}</span>
+      </div>
+      <div className="chips" role="group" aria-label="Double-check with">
+        {others.map((p) => {
+          const on = chosen.includes(p.id);
+          const locked = !keys[p.id] && !on;
+          return (
+            <button type="button" key={p.id} className={`chip-toggle ${on ? 'on' : ''}`} aria-pressed={on} disabled={locked} onClick={() => toggle(p.id)} title={locked ? 'Add a key for this service in Settings first' : undefined}>
+              {on && <Icon name="check" size={13} />} {p.name}
+              {locked && <span className="chip-note"> · add key in Settings</span>}
+            </button>
+          );
+        })}
+      </div>
+      <span className="hint">
+        Each chosen service transcribes too. Anywhere they disagree, or one hears words the others missed, gets flagged; when two or more agree, the flag is ranked higher. Adds each service's cost. ElevenLabs Scribe is a good pick: very accurate, and it marks words it's unsure of.
+        {noKey.length > 0 && <> <a href="#/settings">Add keys in Settings</a> to use {noKey.length === others.length ? 'this' : 'more services'}.</>}
+      </span>
+      {missingKey.length > 0 && <span className="hint warn-text">No key saved for {missingKey.map((p) => p.name).join(', ')} yet. <a href="#/settings">Add it in Settings</a>, or that double-check will be skipped.</span>}
+    </div>
   );
 }
 
@@ -126,7 +163,7 @@ function PresetCard({ preset: p, settings, providers, onChange, onDelete }) {
           <div className="grid-2">
             <label>
               Provider
-              <select value={p.provider} onChange={(e) => onChange({ provider: e.target.value })}>
+              <select value={p.provider} onChange={(e) => onChange({ provider: e.target.value, secondOpinions: chosenOpinions(p).filter((id) => id !== e.target.value), secondOpinion: undefined })}>
                 {providers.map((x) => (
                   <option key={x.id} value={x.id}>{x.name}</option>
                 ))}
@@ -163,6 +200,7 @@ function PresetCard({ preset: p, settings, providers, onChange, onDelete }) {
             <label><input type="checkbox" checked={p.fillerWords} onChange={(e) => onChange({ fillerWords: e.target.checked })} /> Keep "um"/"uh"</label>
           </div>
           {p.provider === 'grok' && <SpeechSensitivity value={p.speechSensitivity} onChange={(speechSensitivity) => onChange({ speechSensitivity })} />}
+          <SecondOpinion value={chosenOpinions(p)} onChange={(secondOpinions) => onChange({ secondOpinions, secondOpinion: undefined })} primary={p.provider} providers={providers} keys={settings.keys} />
           <div>
             <div className="label-like">
               Track layout <span className="hint-inline">names for audio tracks 1, 2, 3… Untick tracks to skip, like game audio</span>

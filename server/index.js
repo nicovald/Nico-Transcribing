@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import busboy from 'busboy';
 import express from 'express';
 import { pipeline } from 'node:stream/promises';
-import { badRequest, object, validateId, validateOptions, validateSetup, validateSettings } from './validation.js';
+import { badRequest, object, secondOpinionsOf, validateId, validateOptions, validateSetup, validateSettings } from './validation.js';
 import { lockPhrase, updateTranscript } from './transcript.js';
 import { safeName, uniqueFiles, exportPlan, writeExports } from './export.js';
 import * as history from './history.js';
@@ -13,7 +13,7 @@ import * as jobs from './jobs.js';
 import { parseTermList } from './glossary.js';
 import { availableModels, proofreaderList, proofreaders } from './proofreaders.js';
 import { request } from './providers/http.js';
-import { providerList } from './providers/index.js';
+import { providerList, providers } from './providers/index.js';
 import { toSrt } from './srt.js';
 import * as store from './store.js';
 import * as sug from './suggestions.js';
@@ -30,15 +30,97 @@ jobs.recoverInterrupted();
 jobs.onJobEvent((event, job) => {
   if (event !== 'finished' || !job || !['done','partial'].includes(job.status)) return;
   if (job.compareFor) {
-    sug.applyCompare(job.compareFor, job.id);
+    const entry = store.getJob(job.compareFor)?.compares?.[job.provider];
+    if (entry?.jobId === job.id && entry.status !== 'cancelled') sug.applyCompare(job.compareFor, job.id);
     return;
   }
   const settings = store.getSettings();
+  secondOpinions(job, settings);
   // Learned fixes and the glossary check are free and instant, so they always run first.
   sug.runMemoryCheck(job.id).then(() => sug.runGlossaryCheck(job.id)).then(() => {
     if (!jobs.isDeleting(job.id) && store.getJob(job.id) && settings.proofread.auto && ['anthropic', 'openai', 'grok'].some((k) => settings.keys[k])) sug.startProofread(job.id);
   });
 });
+
+function setCompare(jobId, provider, patch) {
+  const j = store.getJob(jobId);
+  if (!j) return;
+  j.compares[provider] = { ...j.compares[provider], ...patch };
+  store.saveJob(j);
+}
+
+// Runs (or retries only the failed tracks of) one comparison child and records how it went.
+// When it finishes with any tracks done, the job-finished listener applies it to the parent.
+function runCompareChild(parentId, provider, childId, onlyFailed = false, extra = {}) {
+  setCompare(parentId, provider, { status: 'running', jobId: childId, provider, error: null, ...extra });
+  return jobs.runJob(childId, { onlyFailed }).then(() => {
+    const done = store.getJob(childId);
+    if (['done','partial'].includes(done?.status)) return;
+    const j = store.getJob(parentId);
+    if (j?.compares?.[provider]?.jobId !== childId) return;
+    const name = providers[provider]?.name || provider;
+    if (done?.status === 'cancelled') return setCompare(parentId, provider, { status: 'cancelled', error: `The ${name} check was cancelled.` });
+    const why = done?.tracks?.find((t) => t.error)?.error || done?.error || 'The transcript failed.';
+    setCompare(parentId, provider, { status: 'error', error: `${name} could not double-check: ${why}` });
+  });
+}
+
+// Shared by the Run button and the automatic second opinions: same tracks, language, terms and options.
+export function startCompare(jobId, provider, { auto = false } = {}) {
+  const job = store.getJob(jobId);
+  if (!job) throw new Error('This transcript no longer exists.');
+  if (jobs.isDeleting(jobId)) throw new Error('This transcript is being removed.');
+  const other = jobs.createJob({
+    projectId: job.projectId,
+    provider,
+    tracks: job.tracks.map(({ mediaId, index, label }) => ({ mediaId, index, label })),
+    options: job.options,
+    compareFor: job.id,
+  });
+  runCompareChild(job.id, provider, other.id, false, { auto, coverage: null });
+  return other;
+}
+
+// Bring an existing comparison up to date with the primary transcript: transcribe tracks it lacks or
+// failed on, otherwise just re-apply it (so tracks recovered by a retry get their second opinion).
+function refreshCompare(jobId, provider) {
+  const job = store.getJob(jobId), entry = job?.compares?.[provider];
+  if (job && jobs.isDeleting(jobId)) throw new Error('This transcript is being removed.');
+  const child = entry?.jobId && store.getJob(entry.jobId);
+  if (!child || entry.status === 'running' || ['running','queued'].includes(child.status)) return null;
+  const lacks = [], failed = [];
+  for (const t of job.tracks) {
+    if (t.status !== 'done') continue;
+    const o = child.tracks.find((x) => x.mediaId === t.mediaId && x.index === t.index);
+    if (!o) lacks.push(t); else if (o.status !== 'done') failed.push(t);
+  }
+  if (lacks.length) { startCompare(jobId, provider, { auto: entry.auto }); return 'restarted'; }
+  if (failed.length) { runCompareChild(jobId, provider, child.id, true); return 'retrying'; }
+  if (['done','partial'].includes(child.status)) { sug.applyCompare(jobId, child.id); return 'applied'; }
+  return null;
+}
+
+// Runs after a normal transcript finishes: starts every chosen "Double-check with" service, and brings
+// existing second opinions up to date after a retry. Never fails the main job.
+function secondOpinions(job, settings) {
+  const wanted = secondOpinionsOf(job.options).filter((p) => p !== job.provider);
+  const existing = store.getJob(job.id)?.compares || {};
+  for (const provider of new Set([...wanted, ...Object.keys(existing)])) {
+    const entry = existing[provider];
+    if (entry?.status === 'running') continue;
+    // A cancelled check only restarts through its own explicit Retry.
+    if (entry?.status === 'cancelled') continue;
+    if (entry?.jobId && store.getJob(entry.jobId)) refreshCompare(job.id, provider);
+    else if (wanted.includes(provider)) startAuto(job, provider, settings);
+  }
+}
+function startAuto(job, provider, settings) {
+  const name = providers[provider]?.name || provider;
+  const fail = (error) => setCompare(job.id, provider, { status: 'error', jobId: null, provider, error, auto: true });
+  if (!providers[provider]) return fail('The chosen second-opinion service is not available.');
+  if (!settings.keys[provider]) return fail(`Could not double-check: no API key saved for ${name}. Add one in Settings, then use Run below.`);
+  try { startCompare(job.id, provider, { auto: true }); } catch (err) { fail(`Could not double-check with ${name}: ${err.message}`); }
+}
 
 export const app = express();
 let desktopToken = null;
@@ -337,10 +419,14 @@ app.post('/api/jobs', (req, res) => {
 app.get('/api/jobs/:id', (req, res) => {
   const job = store.getJob(req.params.id);
   if (!job) return notFound(res);
-  const compareJob = job.compare?.jobId ? store.getJob(job.compare.jobId) : null;
+  const compareJobs = {};
+  for (const [provider, entry] of Object.entries(job.compares)) {
+    const child = entry.jobId && store.getJob(entry.jobId);
+    if (child) compareJobs[provider] = { id: child.id, provider: child.provider, status: child.status, error: child.error };
+  }
   res.json({
     ...jobView(job),
-    compareJob: compareJob && { id: compareJob.id, provider: compareJob.provider, status: compareJob.status, error: compareJob.error },
+    compareJobs,
     cues: jobs.readCues(job.id),
     suggestions: jobs.readSuggestions(job.id),
     ...history.summary(job.id),
@@ -362,7 +448,14 @@ app.post('/api/jobs/:id/retry', (req, res) => {
 });
 
 app.post('/api/jobs/:id/cancel', async (req, res) => {
-  await jobs.cancelJob(req.params.id);
+  // Second-opinion transcripts are paid work too: stopping the job stops them.
+  const job = store.getJob(req.params.id);
+  const children = [];
+  for (const [provider, entry] of Object.entries(job?.compares || {})) {
+    if (entry.status === 'running') setCompare(job.id, provider, { status: 'cancelled', error: `The ${providers[provider]?.name || provider} check was cancelled.` });
+    if (entry.jobId) children.push(entry.jobId);
+  }
+  await Promise.all([jobs.cancelJob(req.params.id), ...children.map((id) => jobs.cancelJob(id))]);
   await sug.cancelChecks(req.params.id);
   res.json({ ok: true });
 });
@@ -403,34 +496,33 @@ app.post('/api/jobs/:id/proofread', (req, res) => {
 });
 
 // Transcribe the same tracks with another provider, then flag where they disagree.
+// Several providers can be added to the same job; running one that already exists replaces it.
 app.post('/api/jobs/:id/compare', (req, res) => {
   const job = store.getJob(req.params.id);
   if (!job) return notFound(res);
-  if (job.compare?.status === 'running' || ['running','queued'].includes(job.status)) return res.status(409).json({error:'Wait for the current transcription or comparison to finish.'});
+  const provider = req.body?.provider;
+  if (typeof provider !== 'string' || !Object.hasOwn(providers, provider)) return res.status(400).json({ error: 'Choose a transcription service to compare with.' });
+  if (provider === job.provider) return res.status(400).json({ error: 'Choose a different service than the one that made this transcript.' });
+  if (job.compares[provider]?.status === 'running' || ['running','queued'].includes(job.status)) return res.status(409).json({error:'Wait for the current transcription or comparison to finish.'});
   try {
-    const other = jobs.createJob({
-      projectId: job.projectId,
-      provider: req.body.provider,
-      tracks: job.tracks.map(({ mediaId, index, label }) => ({ mediaId, index, label })),
-      options: job.options,
-      compareFor: job.id,
-    });
-    job.compare = { status: 'running', jobId: other.id, provider: other.provider, error: null };
-    store.saveJob(job);
-    jobs.runJob(other.id).then(() => {
-      const done = store.getJob(other.id);
-      if (!['done','partial'].includes(done?.status)) {
-        const j = store.getJob(job.id);
-        if (j) {
-          j.compare = { ...j.compare, status: 'error', error: done?.error || 'Comparison transcript failed' };
-          store.saveJob(j);
-        }
-      }
-    });
+    startCompare(job.id, provider);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(jobs.isDeleting(job.id) ? 409 : 400).json({ error: err.message });
   }
+});
+
+// Retry only the tracks a second opinion could not check.
+app.post('/api/jobs/:id/compare/retry', (req, res) => {
+  const job = store.getJob(req.params.id);
+  if (!job) return notFound(res);
+  const provider = req.body?.provider;
+  if (typeof provider !== 'string' || !job.compares[provider]) return res.status(400).json({ error: 'That double-check does not exist.' });
+  if (job.compares[provider].status === 'running' || ['running','queued'].includes(job.status)) return res.status(409).json({error:'Wait for the current transcription or comparison to finish.'});
+  let action;
+  try { action = refreshCompare(job.id, provider); } catch (err) { return res.status(409).json({ error: err.message }); }
+  if (!action) return res.status(400).json({ error: 'There is nothing to retry. Use Run to double-check again.' });
+  res.json({ ok: true, action });
 });
 
 app.patch('/api/jobs/:id/cues/:cueId', (req, res) => {
@@ -489,7 +581,11 @@ async function removeJob(id) {
   jobs.markDeleting(id);
   await jobs.cancelJob(id);
   await sug.cancelChecks(id);
-  for (const child of store.listJobs()) if (child.compareFor === id) await removeJob(child.id);
+  // Children can appear while we wait on aborts, so keep scanning until none are left.
+  for (let found = true; found;) {
+    found = false;
+    for (const child of store.listJobs()) if (child.compareFor === id) { found = true; await removeJob(child.id); }
+  }
   store.deleteJob(id);
 }
 app.delete('/api/jobs/:id', async (req, res) => {

@@ -2,6 +2,12 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
 
+## 1.2.0 (2026-10-14)
+- **Double-check with other services**: pick one or more extra services (ElevenLabs Scribe, AssemblyAI, Deepgram, OpenAI) and every transcript is automatically checked against them. Anywhere they disagree, or one hears words the others missed, gets flagged. This catches mistakes no term list or proofread would find. Off by default; each chosen service adds its own cost.
+- When two or more services agree on a fix, it says so ("2 services") and is sorted to the top.
+- You can also run another service by hand from Review, cancel double-checks, and retry only the tracks that failed.
+- Service prices are shown next to each service.
+
 ## 1.1.0 (2026-10-14)
 Accuracy release: fewer missed words and more of your names reach the transcriber.
 - **Catch quiet speech** (Grok): a new setting that stops Grok from skipping quiet or far-off talking. Grok ignores audio it thinks isn't speech; "More" and "Most" lower that bar. Normal keeps today's behaviour.

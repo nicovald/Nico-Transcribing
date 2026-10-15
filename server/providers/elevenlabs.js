@@ -6,7 +6,7 @@ export default {
   name: 'ElevenLabs Scribe',
   model: 'scribe_v2',
   keyUrl: 'https://elevenlabs.io/app/settings/api-keys',
-  notes: 'Per-word confidence, very accurate.',
+  notes: 'About $0.22/hr. Per-word confidence, very accurate.',
   // Up to 1000 keyterms, each under 50 characters, at most 5 words, none of < > { } [ ] \.
   keyterms: { max: 1000, maxChars: 49, maxWords: 5, banned: /[<>{}[\]\\]/ },
 

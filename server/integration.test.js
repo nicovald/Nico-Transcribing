@@ -13,6 +13,7 @@ const store = await import('./store.js');
 const jobs = await import('./jobs.js');
 const sug = await import('./suggestions.js');
 const history = await import('./history.js');
+const validation = await import('./validation.js');
 const { app, configureDesktop } = await import('./index.js');
 const { providers } = await import('./providers/index.js');
 const { proofreaders } = await import('./proofreaders.js');
@@ -239,4 +240,222 @@ test('OpenAI proofreading is fixed to gpt-6-luna even if another model was saved
   const { modelFor, proofreaders:p } = await import('./proofreaders.js');
   assert.equal(modelFor(p.openai,{proofread:{models:{openai:'gpt-6-astra'}}}),'gpt-6-luna');
   assert.equal(modelFor(p.claude,{proofread:{models:{claude:'claude-haiku-4-5'}}}),'claude-haiku-4-5');
+});
+
+// ---- automatic second opinions (several services, agreement, cancel, retry, partial) ----
+const waitFor = async (fn) => { for (let i = 0; i < 300 && !fn(); i++) await new Promise((r) => setTimeout(r, 20)); };
+const sandy = [{ text: 'sandy', start: 0, end: .3, confidence: .8 }, { text: 'stown', start: .3, end: .6, confidence: .8 }];
+const heard = (text) => async () => ({ words: text.split(' ').map((t, i, all) => ({ text: t, start: i * .6 / all.length, end: (i + 1) * .6 / all.length, confidence: .9 })), language: 'en' });
+const mkSecond = (secondOpinions, labels = ['Mic']) => jobs.createJob({ projectId: project.id, provider: 'grok', tracks: labels.map((label, index) => ({ mediaId: media.id, index, label })), options: { voiceCleanup: false, secondOpinions } });
+const compareSugs = (id) => jobs.readSuggestions(id).filter((s) => s.source === 'compare');
+
+test('second opinions skip safely without a key, and start nothing when off', async () => {
+  providers.grok.transcribe = async () => ({ words: sandy, language: 'en' });
+  const noKey = mkSecond(['deepgram']); await jobs.runJob(noKey.id);
+  assert.equal(store.getJob(noKey.id).status, 'done');
+  assert.equal(store.listJobs().filter((j) => j.compareFor === noKey.id).length, 0);
+  assert.match(store.getJob(noKey.id).compares.deepgram.error, /no API key/);
+  const off = mkSecond([]); await jobs.runJob(off.id);
+  assert.equal(store.listJobs().filter((j) => j.compareFor === off.id).length, 0);
+  assert.deepEqual(store.getJob(off.id).compares, {});
+});
+
+test('several second opinions create several children and agreeing services merge into one suggestion', async () => {
+  store.saveSettings({ keys: { deepgram: 'test-only', elevenlabs: 'test-only', assemblyai: 'test-only' } });
+  providers.grok.transcribe = async () => ({ words: sandy, language: 'en' });
+  providers.deepgram.transcribe = heard('sandstone');
+  providers.elevenlabs.transcribe = heard('sandstone');
+  providers.assemblyai.transcribe = heard('sand rock');
+  const job = mkSecond(['deepgram', 'elevenlabs', 'assemblyai']); await jobs.runJob(job.id);
+  await waitFor(() => Object.values(store.getJob(job.id).compares).length === 3 && Object.values(store.getJob(job.id).compares).every((c) => c.status === 'done'));
+  const kids = store.listJobs().filter((j) => j.compareFor === job.id);
+  assert.deepEqual(kids.map((k) => k.provider).sort(), ['assemblyai', 'deepgram', 'elevenlabs']);
+  const found = compareSugs(job.id);
+  const agreed = found.filter((s) => s.to === 'sandstone');
+  assert.equal(agreed.length, 1);
+  assert.equal(agreed[0].agree, 2);
+  assert.equal(agreed[0].services.length, 2);
+  assert.match(agreed[0].reason, /heard "sandstone"/);
+  assert.match(agreed[0].reason, / and /);
+  // The service that heard something else stays a separate, single-service suggestion.
+  const lone = found.filter((s) => s.to === 'sand rock');
+  assert.equal(lone.length, 1); assert.equal(lone[0].agree, 1);
+  store.saveSettings({ keys: { deepgram: '', elevenlabs: '', assemblyai: '' } });
+});
+
+test('mergeAgreement merges insertions and missed lines across services and keeps disagreements apart', () => {
+  const ins = (label, to = 'get more stone') => ({ label, found: [{ cueId: 'c', from: 'get stone', to, occurrence: 0, kind: 'insert', heard: 'more', sourceLabel: label, reason: `${label} also heard "more"` }] });
+  const line = (label, text, start) => ({ label, found: [{ kind: 'insert-line', cueId: null, track: 1, start, end: start + 2, text, from: '', to: text, sourceLabel: label, reason: 'x' }] });
+  const merged = sug.mergeAgreement([ins('A'), ins('B'), line('A', 'Hello there friend', 5), line('B', 'hello there, friend', 5.5), line('C', 'Something else', 5)]);
+  assert.equal(merged.length, 3);
+  assert.deepEqual(merged.map((s) => s.agree), [2, 2, 1]);
+  assert.match(merged[0].reason, /^A and B also heard "more"$/);
+});
+
+test('cancel stops running second-opinion children and the check', async () => {
+  store.saveSettings({ keys: { deepgram: 'test-only' } });
+  providers.grok.transcribe = async () => ({ words: sandy, language: 'en' });
+  let aborted = false, entered = false;
+  providers.deepgram.transcribe = ({ signal }) => new Promise((resolve, reject) => { entered = true; signal.addEventListener('abort', () => { aborted = true; reject(signal.reason); }, { once: true }); });
+  const job = mkSecond(['deepgram']); await jobs.runJob(job.id);
+  await waitFor(() => store.getJob(job.id).compares.deepgram?.jobId && store.getJob(store.getJob(job.id).compares.deepgram.jobId).status === 'running');
+  await waitFor(() => entered);
+  assert.equal(store.getJob(job.id).compares.deepgram.status, 'running');
+  assert.equal((await call(`/api/jobs/${job.id}/cancel`, 'POST')).status, 200);
+  await waitFor(() => store.getJob(job.id).compares.deepgram.status === 'cancelled');
+  assert.ok(aborted);
+  const child = store.listJobs().find((j) => j.compareFor === job.id);
+  assert.equal(child.status, 'cancelled');
+  assert.equal(store.getJob(job.id).compares.deepgram.status, 'cancelled');
+  assert.equal(compareSugs(job.id).length, 0);
+  store.saveSettings({ keys: { deepgram: '' } });
+});
+
+test('retrying failed primary tracks re-applies the second opinion to the recovered tracks', async () => {
+  store.saveSettings({ keys: { deepgram: 'test-only' } });
+  let primaryCalls = 0;
+  providers.grok.transcribe = async () => { if (++primaryCalls === 2) throw new Error('Temporary provider error'); return { words: sandy, language: 'en' }; };
+  providers.deepgram.transcribe = heard('sandstone');
+  const job = mkSecond(['deepgram'], ['Mic A', 'Mic B']); await jobs.runJob(job.id);
+  assert.equal(store.getJob(job.id).status, 'partial');
+  await waitFor(() => store.getJob(job.id).compares.deepgram?.status === 'done');
+  assert.deepEqual([...new Set(compareSugs(job.id).map((s) => s.cueId.split('-')[0]))], ['0']);
+  // Retry through the API: the second track is recovered and now gets its double-check as well.
+  assert.equal((await call(`/api/jobs/${job.id}/retry`, 'POST')).status, 200);
+  await waitFor(() => store.getJob(job.id).status === 'done' && new Set(compareSugs(job.id).map((s) => s.cueId.split('-')[0])).size === 2);
+  assert.deepEqual([...new Set(compareSugs(job.id).map((s) => s.cueId.split('-')[0]))].sort(), ['0', '1']);
+  assert.equal(store.getJob(job.id).compares.deepgram.status, 'done');
+  store.saveSettings({ keys: { deepgram: '' } });
+});
+
+test('a partial second opinion names the unchecked track and Retry redoes only that track', async () => {
+  store.saveSettings({ keys: { deepgram: 'test-only' } });
+  providers.grok.transcribe = async () => ({ words: sandy, language: 'en' });
+  let calls = 0;
+  providers.deepgram.transcribe = async () => { calls++; if (calls === 2) throw new Error('Deepgram was busy'); return { words: [{ text: 'sandstone', start: 0, end: .6, confidence: .9 }], language: 'en' }; };
+  const job = mkSecond(['deepgram'], ['Mic A', 'Mic B']); await jobs.runJob(job.id);
+  await waitFor(() => store.getJob(job.id).compares.deepgram?.status === 'partial');
+  const entry = store.getJob(job.id).compares.deepgram;
+  assert.equal(entry.status, 'partial');
+  assert.match(entry.error, /Mic B/); assert.match(entry.error, /Deepgram was busy/);
+  assert.deepEqual(entry.coverage.checked, ['Mic A']);
+  assert.equal(entry.coverage.unchecked[0].label, 'Mic B');
+  const before = calls;
+  assert.equal((await call(`/api/jobs/${job.id}/compare/retry`, 'POST', { provider: 'deepgram' })).status, 200);
+  await waitFor(() => store.getJob(job.id).compares.deepgram.status === 'done');
+  assert.equal(calls, before + 1);
+  assert.equal(store.getJob(job.id).compares.deepgram.coverage.unchecked.length, 0);
+  assert.equal(store.getJob(job.id).compares.deepgram.error, null);
+  store.saveSettings({ keys: { deepgram: '' } });
+});
+
+test('the old single secondOpinion option and the old job.compare field still work', () => {
+  const { validateOptions, secondOpinionsOf } = validation;
+  assert.deepEqual(validateOptions({ secondOpinion: 'deepgram' }).secondOpinions, ['deepgram']);
+  assert.deepEqual(validateOptions({ secondOpinion: '' }).secondOpinions, []);
+  assert.deepEqual(validateOptions({ secondOpinions: ['a', 'b', 'a'] }).secondOpinions, ['a', 'b']);
+  assert.deepEqual(secondOpinionsOf({ secondOpinion: 'elevenlabs' }), ['elevenlabs']);
+  assert.throws(() => validateOptions({ secondOpinions: 'deepgram' }), /valid/);
+  const job = mkSecond([]);
+  store.saveJob({ ...job, compares: undefined, compare: { status: 'done', jobId: null, provider: 'deepgram', error: null, auto: true, count: 3 } });
+  const read = store.getJob(job.id);
+  assert.equal(read.compare, undefined);
+  assert.equal(read.compares.deepgram.count, 3);
+});
+
+// ---- review fixes: legacy option migration, cancelled checks, deletion races, in-place flags, missed-line identity ----
+test('the old secondOpinion default is migrated away and an explicit empty list stays off', () => {
+  store.saveSettings({ lastOptions: { secondOpinion: 'deepgram' }, presets: [{ id: 'p1', name: 'P', context: '', provider: 'grok', tracks: [], secondOpinion: 'elevenlabs' }] });
+  let saved = store.getSettings();
+  assert.deepEqual(saved.lastOptions.secondOpinions, ['deepgram']);
+  assert.ok(!('secondOpinion' in saved.lastOptions));
+  assert.deepEqual(saved.presets[0].secondOpinions, ['elevenlabs']);
+  assert.ok(!('secondOpinion' in saved.presets[0]));
+  // Saving "all unchecked" must not let a leftover legacy string bring the service back.
+  store.saveSettings({ lastOptions: { secondOpinions: [] } });
+  saved = store.getSettings();
+  assert.deepEqual(saved.lastOptions.secondOpinions, []);
+  assert.ok(!('secondOpinion' in saved.lastOptions));
+  assert.deepEqual(validation.secondOpinionsOf({ secondOpinion: 'deepgram', secondOpinions: [] }), []);
+  assert.deepEqual(validation.validateOptions({ secondOpinion: 'deepgram', secondOpinions: [] }).secondOpinions, []);
+  store.saveSettings({ presets: [] });
+});
+
+test('retrying the primary does not restart a cancelled manual double-check', async () => {
+  store.saveSettings({ keys: { deepgram: 'test-only' } });
+  let primaryCalls = 0, deepgramCalls = 0;
+  providers.grok.transcribe = async () => { if (++primaryCalls === 2) throw new Error('Temporary provider error'); return { words: sandy, language: 'en' }; };
+  providers.deepgram.transcribe = ({ signal }) => new Promise((resolve, reject) => { deepgramCalls++; signal.addEventListener('abort', () => reject(signal.reason), { once: true }); });
+  const job = mkSecond([], ['Mic A', 'Mic B']); await jobs.runJob(job.id);
+  assert.equal(store.getJob(job.id).status, 'partial');
+  assert.equal((await call(`/api/jobs/${job.id}/compare`, 'POST', { provider: 'deepgram' })).status, 200);
+  await waitFor(() => deepgramCalls > 0);
+  await call(`/api/jobs/${job.id}/cancel`, 'POST');
+  await waitFor(() => store.getJob(job.id).compares.deepgram.status === 'cancelled');
+  const before = deepgramCalls;
+  assert.equal((await call(`/api/jobs/${job.id}/retry`, 'POST')).status, 200);
+  await waitFor(() => store.getJob(job.id).status === 'done');
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(deepgramCalls, before);
+  assert.equal(store.getJob(job.id).compares.deepgram.status, 'cancelled');
+  store.saveSettings({ keys: { deepgram: '', elevenlabs: '' } });
+});
+
+test('a double-check cannot be started while its transcript is being deleted, and no orphan survives', async () => {
+  store.saveSettings({ keys: { deepgram: 'test-only', elevenlabs: 'test-only' } });
+  providers.grok.transcribe = async () => ({ words: sandy, language: 'en' });
+  let entered = false;
+  providers.deepgram.transcribe = ({ signal }) => new Promise((resolve, reject) => { entered = true; signal.addEventListener('abort', () => setTimeout(() => reject(signal.reason), 150), { once: true }); });
+  providers.elevenlabs.transcribe = heard('sandstone');
+  const job = mkSecond([]); await jobs.runJob(job.id);
+  assert.equal((await call(`/api/jobs/${job.id}/compare`, 'POST', { provider: 'deepgram' })).status, 200);
+  await waitFor(() => entered);
+  const deleting = call(`/api/jobs/${job.id}`, 'DELETE');
+  await waitFor(() => jobs.isDeleting(job.id));
+  const late = await call(`/api/jobs/${job.id}/compare`, 'POST', { provider: 'elevenlabs' });
+  assert.ok(late.status >= 400);
+  assert.match(late.body.error, /removed|deleted/i);
+  const retry = await call(`/api/jobs/${job.id}/compare/retry`, 'POST', { provider: 'deepgram' });
+  assert.ok(retry.status >= 400);
+  await deleting;
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(store.listJobs().filter((j) => j.compareFor === job.id).length, 0);
+  assert.equal(store.getJob(job.id), null);
+  store.saveSettings({ keys: { deepgram: '', elevenlabs: '' } });
+});
+
+test('a late second-opinion result keeps the ids of unchanged flags and adds only new ones', () => {
+  const job = seed();
+  const snapshot = jobs.readCues(job.id);
+  const word = (svc) => ({ cueId: '0-0', from: 'couples stone', to: 'Cobble block', occurrence: 0, kind: 'replace', source: 'compare', sourceLabel: svc.join(' and '), services: svc, agree: svc.length, reason: `${svc.join(' and ')} heard "Cobble block"` });
+  const line = (svc, start) => ({ kind: 'insert-line', cueId: null, track: 1, start, end: start + 2, text: 'Hello there', from: '', to: 'Hello there', source: 'compare', sourceLabel: svc.join(' and '), services: svc, agree: svc.length, reason: 'x' });
+  sug.mergeSuggestions(job.id, [word(['A']), line(['A'], 5)], 'compare', snapshot);
+  const first = compareSugs(job.id);
+  assert.equal(first.length, 2);
+  sug.mergeSuggestions(job.id, [word(['A', 'B']), line(['A', 'B'], 5.2), { ...word(['B']), to: 'Stone brick', reason: 'B' }], 'compare', snapshot);
+  const second = compareSugs(job.id);
+  assert.equal(second.length, 3);
+  for (const old of first) {
+    const kept = second.find((s) => s.id === old.id);
+    assert.ok(kept, 'id kept');
+    assert.equal(kept.agree, 2);
+  }
+  // A flag no finished comparison produces any more is dropped.
+  sug.mergeSuggestions(job.id, [word(['A', 'B'])], 'compare', snapshot);
+  assert.deepEqual(compareSugs(job.id).map((s) => s.id), [first[0].id]);
+});
+
+test('an ignored missed line stays ignored when a later service heard it at slightly different times', () => {
+  const job = seed();
+  const snapshot = jobs.readCues(job.id);
+  const line = (svc, start) => ({ kind: 'insert-line', cueId: null, track: 1, start, end: start + 2, text: 'Hello there', from: '', to: 'Hello there', source: 'compare', sourceLabel: svc, services: [svc], agree: 1, reason: 'x' });
+  sug.mergeSuggestions(job.id, [line('B', 5.4)], 'compare', snapshot);
+  const [b] = compareSugs(job.id);
+  sug.dismissSuggestion(job.id, b.id);
+  // Provider A (listed first) finishes later; the merged result now carries A's timestamp.
+  sug.mergeSuggestions(job.id, sug.mergeAgreement([{ label: 'A', found: [line('A', 5)] }, { label: 'B', found: [line('B', 5.4)] }]), 'compare', snapshot);
+  const all = compareSugs(job.id);
+  assert.equal(all.length, 1);
+  assert.equal(all[0].status, 'dismissed');
+  assert.equal(all.filter((s) => s.status === 'open').length, 0);
 });

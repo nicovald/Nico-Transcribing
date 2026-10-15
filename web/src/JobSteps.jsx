@@ -4,9 +4,12 @@ import { Icon } from './shared.jsx';
 // Where a transcription is right now: prepare audio → send to the service → check for mistakes → review.
 // Tracks run in parallel, so more than one step can be active at once.
 const active = (x) => x?.status === 'running' || x?.status === 'queued';
-const CHECKS = [['memory', 'Learned fixes'], ['glossary', 'Glossary'], ['proofread', 'AI proofread']];
+const CHECKS = [['memory', 'Learned fixes'], ['glossary', 'Glossary'], ['proofread', 'AI proofread'], ['compare', 'Double-check']];
 
-export const showSteps = (job) => active(job) || CHECKS.some(([k]) => active(job[k]));
+// A check is running; "compare" covers every second opinion of the job.
+const checkActive = (job, k) => (k === 'compare' ? Object.values(job.compares || {}).some(active) : active(job[k]));
+
+export const showSteps = (job) => active(job) || CHECKS.some(([k]) => checkActive(job, k));
 
 export default function JobSteps({ job, providerName }) {
   const tracks = job.tracks;
@@ -14,7 +17,7 @@ export default function JobSteps({ job, providerName }) {
   const finished = tracks.filter((t) => t.status === 'done' || t.status === 'error').length;
   const waiting = tracks.some((t) => t.status === 'queued' || (t.status === 'running' && (!t.step || (t.step.step === 'preparing' && t.step.part === 1))));
   const sending = tracks.filter((t) => t.status === 'running' && t.step?.step === 'sending');
-  const runningCheck = CHECKS.find(([k]) => active(job[k]));
+  const runningCheck = CHECKS.find(([k]) => checkActive(job, k));
   const longest = sending.reduce((a, t) => (t.step.seconds > (a?.step.seconds ?? -1) ? t : a), null);
   const tracksDone = tracks.length > 1 ? `${finished} of ${tracks.length} tracks done` : null;
 
@@ -41,7 +44,7 @@ export default function JobSteps({ job, providerName }) {
       title: 'Check for mistakes',
       state: transcribing ? 'todo' : runningCheck ? 'active' : 'done',
       detail: transcribing
-        ? 'Learned fixes, glossary and AI proofread'
+        ? job.options?.secondOpinions?.length || job.options?.secondOpinion ? 'Learned fixes, glossary, AI proofread and double-check' : 'Learned fixes, glossary and AI proofread'
         : runningCheck
           ? `${runningCheck[1]}${runningCheck[0] === 'proofread' && job.proofread.progress ? ` · ${Math.round(job.proofread.progress * 100)}%` : '…'}`
           : 'Checks finished',

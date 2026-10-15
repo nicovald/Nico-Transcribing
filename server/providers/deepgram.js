@@ -6,7 +6,7 @@ export default {
   name: 'Deepgram',
   model: 'nova-3',
   keyUrl: 'https://console.deepgram.com/',
-  notes: 'Per-word confidence, strong on noisy audio.',
+  notes: 'About $0.26/hr. Per-word confidence, strong on noisy audio.',
   // nova-3 keyterms share a 500 token budget and going over rejects the request. Our counter is
   // conservative, and an explicit "Keyterm limit exceeded" reply retries once with half the terms.
   // https://developers.deepgram.com/docs/keyterm#key-term-limits

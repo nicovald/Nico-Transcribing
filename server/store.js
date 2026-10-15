@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isId, validateId, validateSettings } from './validation.js';
+import { isId, migrateOpinions, validateId, validateSettings } from './validation.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS = {
     fillerWords: false,
     diarize: false,
     speechSensitivity: 'normal',
+    secondOpinions: [], // provider ids that transcribe too and flag disagreements; [] = off
   },
   // Reusable key-term lists, e.g. one per game.
   termLists: [],
@@ -89,6 +90,12 @@ export { readJson };
 
 const OBJECT_KEYS = ['keys', 'models', 'lastOptions', 'proofread', 'cue'];
 
+// The old single `secondOpinion` string becomes `secondOpinions` and is removed, so an opted-out service cannot come back.
+function migrateSecondOpinions(settings) {
+  settings.lastOptions = migrateOpinions(settings.lastOptions);
+  if (Array.isArray(settings.presets)) settings.presets = settings.presets.map(migrateOpinions);
+}
+
 export function getSettings() {
   const saved = readJson(SETTINGS_FILE, {});
   if (saved.keys) saved.keys = Object.fromEntries(Object.entries(saved.keys).map(([id,key]) => {
@@ -99,6 +106,7 @@ export function getSettings() {
   }));
   const merged = { ...DEFAULT_SETTINGS, ...saved };
   for (const k of OBJECT_KEYS) merged[k] = { ...DEFAULT_SETTINGS[k], ...saved[k] };
+  migrateSecondOpinions(merged);
   // Settings from v0.1 kept these at the top level.
   if (saved.defaultProvider && !saved.lastOptions) merged.lastOptions.provider = saved.defaultProvider;
   return merged;
@@ -107,8 +115,11 @@ export function getSettings() {
 export function saveSettings(patch) {
   validateSettings(patch);
   const current = getSettings();
+  if (patch.lastOptions) patch = { ...patch, lastOptions: migrateOpinions(patch.lastOptions) };
+  if (Array.isArray(patch.presets)) patch = { ...patch, presets: patch.presets.map(migrateOpinions) };
   const next = { ...current, ...patch };
   for (const k of OBJECT_KEYS) next[k] = { ...current[k], ...patch[k] };
+  migrateSecondOpinions(next);
   for (const k of ['defaultProvider', 'language', 'keyterms', 'voiceCleanup', 'fillerWords', 'diarize']) delete next[k];
   const disk = secrets ? { ...next, keys: Object.fromEntries(Object.entries(next.keys).map(([id,key]) => [id,key ? SECRET_PREFIX + secrets.encrypt(key) : ''])) } : next;
   writeJson(SETTINGS_FILE, disk);
@@ -116,9 +127,9 @@ export function saveSettings(patch) {
 }
 
 // ---- generic per-id JSON collections ----
-function collection(dir, file) {
+function collection(dir, file, normalize = (x) => x) {
   const dirOf = (id) => path.join(dir, validateId(id));
-  const get = (id) => readJson(path.join(dirOf(id), file), null);
+  const get = (id) => normalize(readJson(path.join(dirOf(id), file), null));
   return {
     dir: dirOf,
     get,
@@ -136,7 +147,17 @@ function collection(dir, file) {
 
 const projects = collection(PROJECTS_DIR, 'project.json');
 const media = collection(MEDIA_DIR, 'media.json');
-const jobs = collection(JOBS_DIR, 'job.json');
+// Jobs used to hold one `compare`; now they hold `compares` keyed by provider. Old files convert as they are read.
+function normalizeJob(job) {
+  if (!job) return job;
+  job.compares = job.compares && typeof job.compares === 'object' ? job.compares : {};
+  if ('compare' in job) {
+    if (job.compare?.provider && !job.compares[job.compare.provider]) job.compares[job.compare.provider] = job.compare;
+    delete job.compare;
+  }
+  return job;
+}
+const jobs = collection(JOBS_DIR, 'job.json', normalizeJob);
 
 export const { get: getProject, save: saveProject, list: listProjects, remove: deleteProject } = projects;
 export const { dir: mediaDir, get: getMedia, save: saveMedia, list: listMedia, remove: deleteMedia } = media;

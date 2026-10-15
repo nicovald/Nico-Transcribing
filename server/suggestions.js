@@ -162,7 +162,7 @@ export function compareWords(cues, otherWordsByTrack, otherLabel) {
         if (!left && /^\p{Lu}/u.test(right.text) && /^\p{Ll}/u.test(ins)) ins = capitalize(ins);
         const from = stripEdges([left?.text, right?.text].filter(Boolean).join(' '));
         const to = stripEdges([left?.text, ins, right?.text].filter(Boolean).join(' '));
-        push(from, to, left ? ai : aj, { kind: 'insert', reason: `${otherLabel} also heard "${ins}"` });
+        push(from, to, left ? ai : aj, { kind: 'insert', heard: ins, reason: `${otherLabel} also heard "${ins}"` });
         continue;
       }
 
@@ -180,7 +180,7 @@ export function compareWords(cues, otherWordsByTrack, otherLabel) {
       // "cobble stone" vs "cobblestone", "OK" vs "okay"-level noise is not worth a flag.
       if (norm(from.replace(/\s/g, '')) === norm(to.replace(/\s/g, ''))) continue;
       if (/^\p{Lu}/u.test(from) && /^\p{Ll}/u.test(to)) to = capitalize(to);
-      push(from, to, ai + 1, { reason: `${otherLabel} heard "${to}"` });
+      push(from, to, ai + 1, { heard: to, reason: `${otherLabel} heard "${to}"` });
     }
   });
   for (const list of found) out.push(...list.sort((a, b) => a.k - b.k).map(x => x.s));
@@ -427,6 +427,7 @@ export async function verifyWithJev(items, { key, context, signal }) {
 // ---------------------------------------------------------------- orchestration
 
 const isLine = s => s.kind === 'insert-line';
+const overlaps = (a, b) => a.end > b.start && a.start < b.end;
 const lineTaken = (cues, s) => cues.some(c => c.track === s.track && c.end > s.start && c.start < s.end);
 const suggestionKey = s => (isLine(s) ? `line|${s.track}|${Number(s.start).toFixed(2)}|${norm(s.text || '')}` : `${s.cueId}|${norm(s.from)}|${norm(s.to)}|${s.occurrence ?? 0}`);
 
@@ -439,11 +440,17 @@ export function mergeSuggestions(jobId, fresh, source, snapshot, scope = null) {
     const replaces = source === 'learned' ? new Set(fresh.map(suggestionKey)) : null;
     const existing = state.suggestions.filter(s => (s.source !== source || s.status !== 'open' || (scope && !scope.has(s.cueId)))
       && !(replaces && s.status === 'open' && ['glossary','people'].includes(s.source) && replaces.has(suggestionKey(s))));
+    // Second opinions update their open flags in place (same ids), so a reviewer's unsaved edits survive a late result.
+    const prior = source === 'compare' ? state.suggestions.filter(s => s.source === source && s.status === 'open' && !(scope && !scope.has(s.cueId))) : [];
+    const reused = new Set();
     // An accepted fix already changed that spot; a remaining match in the line is a new one.
     const seen = new Set(existing.filter(s => s.status !== 'accepted' || isLine(s)).map(suggestionKey));
+    // A missed line is the same line when track, overlapping time and wording match, whatever service timed it.
+    const sameLine = (a, b) => isLine(a) && isLine(b) && a.track === b.track && overlaps(a, b) && norm(a.text || '') === norm(b.text || '');
     for (let s of fresh) {
       if (isLine(s)) {
         if (lineTaken(state.cues, s)) continue;
+        if (existing.some(e => sameLine(e, s))) continue;
       } else {
         const cue = current.get(s.cueId), old = byId.get(s.cueId);
         if (!cue || !old || cue.text !== old.text || cue.start !== old.start || cue.end !== old.end) continue;
@@ -452,6 +459,14 @@ export function mergeSuggestions(jobId, fresh, source, snapshot, scope = null) {
       }
       const key = suggestionKey(s);
       if (seen.has(key)) continue;
+      const match = prior.find(o => !reused.has(o) && (isLine(s) ? sameLine(o, s) : suggestionKey(o) === key));
+      if (match) {
+        reused.add(match);
+        for (const f of ['services', 'agree', 'sourceLabel', 'reason']) if (f in s) match[f] = s[f];
+        existing.push(match);
+        seen.add(key);
+        continue;
+      }
       seen.add(key);
       existing.push({ ...s, id: `s-${crypto.randomUUID()}`, verified: null, status: 'open' });
     }
@@ -487,27 +502,30 @@ export async function cancelChecks(id) {
   for (const task of work) task.controller.abort(new Error('Check cancelled'));
   await Promise.all(work.map(task => task.promise));
 }
-function runStep(jobId, field, fn) {
-  const key = `${jobId}:${field}`;
+// `sub` (a provider id) selects one entry of job.compares instead of a plain job field.
+const stepGet = (job, field, sub) => (sub ? job.compares?.[sub] : job[field]);
+const stepSet = (job, field, sub, value) => { if (sub) (job.compares ||= {})[sub] = value; else job[field] = value; };
+function runStep(jobId, field, fn, sub = null) {
+  const key = `${jobId}:${field}${sub ? `:${sub}` : ''}`;
   if (checks.has(key)) return checks.get(key).promise;
   const job = store.getJob(jobId);
   if (!job || isDeleting(jobId)) return Promise.resolve();
   const controller = new AbortController(), signal = controller.signal;
-  job[field] = { ...job[field], status: 'running', error: null, progress: 0 };
+  stepSet(job, field, sub, { ...stepGet(job, field, sub), status: 'running', error: null, progress: 0 });
   store.saveJob(job);
   const promise = Promise.resolve().then(async () => {
     try {
       signal.throwIfAborted();
       const result = await fn(job, p => {
         const j = store.getJob(jobId);
-        if (j && !signal.aborted && !isDeleting(jobId)) { j[field] = { ...j[field], progress: p }; store.saveJob(j); }
+        if (j && !signal.aborted && !isDeleting(jobId)) { stepSet(j, field, sub, { ...stepGet(j, field, sub), progress: p }); store.saveJob(j); }
       }, signal);
       signal.throwIfAborted();
       const j = store.getJob(jobId);
-      if (j && !isDeleting(jobId)) { j[field] = { ...j[field], ...result, status: 'done', finishedAt: new Date().toISOString() }; store.saveJob(j); }
+      if (j && !isDeleting(jobId)) { stepSet(j, field, sub, { ...stepGet(j, field, sub), status: 'done', error: null, ...result, finishedAt: new Date().toISOString() }); store.saveJob(j); }
     } catch (err) {
       const j = store.getJob(jobId);
-      if (j && !isDeleting(jobId)) { j[field] = { ...j[field], status: signal.aborted ? 'cancelled' : 'error', error: err.message }; store.saveJob(j); }
+      if (j && !isDeleting(jobId)) { stepSet(j, field, sub, { ...stepGet(j, field, sub), status: signal.aborted ? 'cancelled' : 'error', error: err.message }); store.saveJob(j); }
     } finally { checks.delete(key); }
   });
   checks.set(key, { controller, promise });
@@ -550,21 +568,80 @@ export function runMemoryCheck(jobId) {
     return { count: found.length };
   });
 }
-export function applyCompare(jobId,otherJobId) {
-  return runStep(jobId,'compare',async (job,onProgress,signal) => {
+// ---- several second opinions: one suggestion per fix, listing every service that agrees ----
+
+const listNames = (names) => (names.length < 2 ? names[0] || '' : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+// groups: [{ label, found }] from each service's compareWords. The same cue + words + replacement from
+// several services becomes ONE suggestion (agree = how many); a service that disagrees stays separate.
+export function mergeAgreement(groups) {
+  const out = [];
+  const byKey = new Map();
+  for (const { label, found } of groups) {
+    for (const s of found) {
+      const hit = isLine(s)
+        ? out.find((o) => isLine(o) && o.track === s.track && overlaps(o, s) && norm(o.text) === norm(s.text))
+        : byKey.get(`${s.cueId}|${norm(s.from)}|${norm(s.to)}|${s.occurrence ?? 0}`);
+      if (hit) {
+        if (!hit.services.includes(label)) hit.services.push(label);
+        continue;
+      }
+      const item = { ...s, services: [label] };
+      out.push(item);
+      if (!isLine(s)) byKey.set(`${s.cueId}|${norm(s.from)}|${norm(s.to)}|${s.occurrence ?? 0}`, item);
+    }
+  }
+  for (const s of out) {
+    s.agree = s.services.length;
+    if (s.agree < 2) continue; // single service: keep the reason compareWords wrote
+    s.sourceLabel = listNames(s.services);
+    const who = s.sourceLabel;
+    s.reason = isLine(s) ? `${who} heard words here that have no subtitle` : `${who} ${s.kind === 'insert' ? 'also heard' : 'heard'} "${s.heard ?? s.to}"`;
+  }
+  return out;
+}
+
+// Which of this transcript's finished tracks a comparison transcript has (and has not) checked.
+export function compareCoverage(job, other) {
+  const checked = [], unchecked = [];
+  job.tracks.forEach((t) => {
+    if (t.status !== 'done') return;
+    const o = other.tracks.find((x) => x.mediaId === t.mediaId && x.index === t.index);
+    if (o?.status === 'done') checked.push(t.label);
+    else unchecked.push({ label: t.label, error: o?.error || 'This track was not transcribed.' });
+  });
+  return { checked, unchecked };
+}
+const coverageError = (name, unchecked) => `${name} could only double-check some tracks. Not checked: ${unchecked.map((u) => `${u.label} (${u.error})`).join(', ')}.`;
+
+export function applyCompare(jobId, otherJobId) {
+  const provider = store.getJob(otherJobId)?.provider;
+  if (!provider) return Promise.resolve();
+  return runStep(jobId, 'compare', async (job, onProgress, signal) => {
     const other = store.getJob(otherJobId);
     if (!other) throw new Error('Comparison transcript was deleted.');
-    const wordsByTrack = {}, snapshot = readCues(job.id);
-    job.tracks.forEach((t,pos) => {
-      const otherPos = other.tracks.findIndex(o => o.mediaId === t.mediaId && o.index === t.index);
-      if (otherPos >= 0) wordsByTrack[pos] = readWords(other.id,otherPos) || [];
-    });
+    const snapshot = readCues(job.id);
+    // Every finished comparison feeds one merged list, so agreement is found across services.
+    const groups = [];
+    for (const entry of Object.values(job.compares || {})) {
+      const child = entry.jobId === other.id ? other : entry.jobId && store.getJob(entry.jobId);
+      if (!child || !['done', 'partial'].includes(child.status)) continue;
+      const wordsByTrack = {};
+      job.tracks.forEach((t, pos) => {
+        const otherPos = child.tracks.findIndex((o) => o.mediaId === t.mediaId && o.index === t.index && o.status === 'done');
+        if (t.status === 'done' && otherPos >= 0) wordsByTrack[pos] = readWords(child.id, otherPos) || [];
+      });
+      const label = providers[child.provider]?.name || child.provider;
+      groups.push({ label, found: compareWords(snapshot, wordsByTrack, label) });
+    }
+    const merged = mergeAgreement(groups);
+    mergeSuggestions(job.id, merged, 'compare', snapshot);
+    await maybeVerify(job, store.getProject(job.projectId), store.getSettings(), signal);
     const label = providers[other.provider]?.name || other.provider;
-    const found = compareWords(snapshot,wordsByTrack,label);
-    mergeSuggestions(job.id,found,'compare',snapshot);
-    await maybeVerify(job,store.getProject(job.projectId),store.getSettings(),signal);
-    return { count: found.length, jobId: other.id, provider: other.provider };
-  });
+    const coverage = compareCoverage(job, other);
+    const result = { count: merged.filter((s) => s.services.includes(label)).length, jobId: other.id, provider: other.provider, coverage };
+    if (coverage.unchecked.length) Object.assign(result, { status: 'partial', error: coverageError(label, coverage.unchecked) });
+    return result;
+  }, provider);
 }
 const fixGroup = s => [s.from,s.to].map(v => v.trim().replace(/\s+/g,' ').toLowerCase()).join('|');
 export function reconcileSuggestions(state) {

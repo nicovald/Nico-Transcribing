@@ -23,7 +23,7 @@ export default {
   // Empty = AssemblyAI's current default (best) model.
   model: '',
   keyUrl: 'https://www.assemblyai.com/dashboard/api-keys',
-  notes: 'Per-word confidence. Upload, then polls until done.',
+  notes: 'About $0.21/hr. Per-word confidence. Upload, then polls until done.',
   // keyterms_prompt: 1000 terms on universal-3-5-pro, 200 on universal-2, max 6 words each.
   // The cap must hold for every model a request can reach: an explicit list with universal-2 in it,
   // and the default routing (which can fall back to universal-2) unless the language is English.

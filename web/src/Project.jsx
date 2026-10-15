@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
 import { navigate, useApp } from './App.jsx';
 import { desktop, DropTarget, EditableText, Icon, isMediaFile, LANGUAGES, Progress, StatusPill } from './shared.jsx';
-import { SpeechSensitivity } from './Presets.jsx';
+import { chosenOpinions, SecondOpinion, SpeechSensitivity } from './Presets.jsx';
 import usePoll from './usePoll.js';
 
 // Unsent setup choices per project, kept while you visit other pages.
@@ -309,6 +309,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
           fillerWords: base.fillerWords ?? false,
           diarize: base.diarize ?? false,
           speechSensitivity: base.speechSensitivity ?? 'normal',
+          secondOpinions: chosenOpinions(base),
         },
       },
   );
@@ -421,7 +422,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
       <div className="grid-2">
         <label>
           Provider
-          <select value={draft.provider} onChange={(e) => setDraft((d) => ({ ...d, provider: e.target.value }))}>
+          <select value={draft.provider} onChange={(e) => setDraft((d) => ({ ...d, provider: e.target.value, options: { ...d.options, secondOpinions: chosenOpinions(d.options).filter((id) => id !== e.target.value), secondOpinion: undefined } }))}>
             {providers.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -488,6 +489,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
         </label>
       </div>
       {draft.provider === 'grok' && <SpeechSensitivity value={draft.options.speechSensitivity} onChange={(v) => setOpt('speechSensitivity', v)} />}
+      <SecondOpinion value={chosenOpinions(draft.options)} onChange={(v) => setDraft((d) => ({ ...d, options: { ...d.options, secondOpinions: v, secondOpinion: undefined } }))} primary={draft.provider} providers={providers} keys={settings.keys} />
 
       {error && <div className="error">{error}</div>}
       {!hasKey(draft.provider) && (

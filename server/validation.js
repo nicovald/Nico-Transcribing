@@ -5,6 +5,17 @@ export function object(value, name = 'Request') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw badRequest(`${name} must be an object.`);
   return value;
 }
+// The chosen second-opinion providers of an options object, accepting the older single-string form.
+export const secondOpinionsOf = (options) => {
+  const list = Array.isArray(options?.secondOpinions) ? options.secondOpinions : [options?.secondOpinion]; // an explicit array always wins over the old string
+  return [...new Set(list.filter(id => typeof id === 'string' && id))];
+};
+// Moves the old single `secondOpinion` string into `secondOpinions` and drops it. Returns the same object kind it was given.
+export function migrateOpinions(options) {
+  if (!options || typeof options !== 'object' || Array.isArray(options) || !('secondOpinion' in options)) return options;
+  const { secondOpinion, ...rest } = options;
+  return { ...rest, secondOpinions: secondOpinionsOf(options) };
+}
 export function validateOptions(input = {}) {
   object(input, 'Transcription options');
   const out = {};
@@ -20,6 +31,11 @@ export function validateOptions(input = {}) {
   if ('speechSensitivity' in input) {
     if (!['normal', 'more', 'most'].includes(input.speechSensitivity)) throw badRequest('Choose a valid "Catch quiet speech" setting.');
     out.speechSensitivity = input.speechSensitivity;
+  }
+  // Provider ids for the automatic second opinions; [] means off. The old single "secondOpinion" string still works.
+  if ('secondOpinions' in input || 'secondOpinion' in input) {
+    if (('secondOpinions' in input && (!Array.isArray(input.secondOpinions) || input.secondOpinions.some(id => typeof id !== 'string'))) || ('secondOpinion' in input && typeof input.secondOpinion !== 'string')) throw badRequest('Choose valid "Double-check with" services.');
+    out.secondOpinions = secondOpinionsOf(input);
   }
   if ('termListIds' in input) {
     if (!Array.isArray(input.termListIds) || input.termListIds.some(id => typeof id !== 'string')) throw badRequest('Choose valid term lists.');

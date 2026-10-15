@@ -250,6 +250,11 @@ label.inline, label.check, .checks label { flex-direction: row; align-items: cen
 .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .chip-toggle { min-height: 32px; padding: 4px 14px; font-size: 13.5px; font-weight: 650; border-radius: 999px; color: var(--text-2); }
 .chip-toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); box-shadow: 0 2px 0 #b6cff4; }
+.chip-toggle:disabled { opacity: 0.7; }
+.chip-note { font-weight: 500; color: var(--muted); font-size: 12px; }
+.second-opinion { display: flex; flex-direction: column; gap: 6px; }
+.second-opinion .chips { margin-bottom: 0; }
+.compare-line { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 
 /* ---------- settings ---------- */
 .key-row { display: grid; grid-template-columns: 2fr 1fr; gap: 8px 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }

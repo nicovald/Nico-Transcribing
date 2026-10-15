@@ -194,7 +194,7 @@ export function createJob({ projectId, tracks, provider, options = {}, compareFo
     status: 'queued',
     error: null,
     proofread: null,
-    compare: null,
+    compares: {}, // second opinions keyed by provider id
     tracks: tracks.map((t) => ({
       mediaId: t.mediaId,
       index: t.index,
@@ -546,9 +546,9 @@ export function recoverInterrupted() {
       for (const t of job.tracks) if (t.status !== 'done') Object.assign(t, { status: 'error', error: 'Interrupted' });
       changed = true;
     }
-    for (const k of ['proofread', 'compare', 'glossary']) {
-      if (job[k]?.status === 'running') {
-        job[k] = { ...job[k], status: 'error', error: 'Interrupted (app was closed).' };
+    for (const entry of [job.proofread, job.glossary, ...Object.values(job.compares || {})]) {
+      if (entry?.status === 'running') {
+        Object.assign(entry, { status: 'error', error: 'Interrupted (app was closed).' });
         changed = true;
       }
     }
