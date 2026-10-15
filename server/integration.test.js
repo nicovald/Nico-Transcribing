@@ -313,8 +313,12 @@ test('cancel stops running second-opinion children and the check', async () => {
 
 test('retrying failed primary tracks re-applies the second opinion to the recovered tracks', async () => {
   store.saveSettings({ keys: { deepgram: 'test-only' } });
-  let primaryCalls = 0;
-  providers.grok.transcribe = async () => { if (++primaryCalls === 2) throw new Error('Temporary provider error'); return { words: sandy, language: 'en' }; };
+  // Tracks transcribe in parallel, so fail the second track by its audio folder, not by call order.
+  let failedOnce = false;
+  providers.grok.transcribe = async ({ file }) => {
+    if (!failedOnce && /tmp-1[\\/]/.test(file)) { failedOnce = true; throw new Error('Temporary provider error'); }
+    return { words: sandy, language: 'en' };
+  };
   providers.deepgram.transcribe = heard('sandstone');
   const job = mkSecond(['deepgram'], ['Mic A', 'Mic B']); await jobs.runJob(job.id);
   assert.equal(store.getJob(job.id).status, 'partial');
