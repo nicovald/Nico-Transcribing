@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS = {
     voiceCleanup: true,
     fillerWords: false,
     diarize: false,
+    speechSensitivity: 'normal',
   },
   // Reusable key-term lists, e.g. one per game.
   termLists: [],

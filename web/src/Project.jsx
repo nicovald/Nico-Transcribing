@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
 import { navigate, useApp } from './App.jsx';
 import { desktop, DropTarget, EditableText, Icon, isMediaFile, LANGUAGES, Progress, StatusPill } from './shared.jsx';
+import { SpeechSensitivity } from './Presets.jsx';
 import usePoll from './usePoll.js';
 
 // Unsent setup choices per project, kept while you visit other pages.
@@ -51,6 +52,15 @@ export default function Project({ projectId }) {
   const fileInput = useRef();
   // Opens the "name your preset" box in the Transcribe section and scrolls to it.
   const requestPreset = () => setPresetRequest((n) => n + 1);
+  // How many key terms each transcript actually sent (the project view leaves that out).
+  const [termCounts, setTermCounts] = useState({});
+  const jobsKey = project?.jobs.map((j) => j.id + j.status).join() || '';
+  useEffect(() => {
+    if (!jobsKey) return;
+    api.get('/api/jobs')
+      .then((all) => setTermCounts(Object.fromEntries(all.filter((j) => j.keytermsTotal > 0).map((j) => [j.id, { sent: j.keytermsSent, total: j.keytermsTotal }]))))
+      .catch(() => {}); // only a detail line; the list still works without it
+  }, [jobsKey]);
 
   if (loadError && !project) return <div className="error">{loadError}</div>;
   if (!project) return <p className="muted">Loading…</p>;
@@ -197,6 +207,7 @@ export default function Project({ projectId }) {
                   </a>
                   <div className="muted small">
                     {j.model} · {new Date(j.createdAt).toLocaleString()}
+                    {termCounts[j.id] && ` · ${termCounts[j.id].sent} of ${termCounts[j.id].total} terms sent to ${providers.transcribers.find((p) => p.id === j.provider)?.name || j.provider}`}
                   </div>
                 </div>
                 <StatusPill status={j.status} />
@@ -297,6 +308,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
           voiceCleanup: base.voiceCleanup ?? true,
           fillerWords: base.fillerWords ?? false,
           diarize: base.diarize ?? false,
+          speechSensitivity: base.speechSensitivity ?? 'normal',
         },
       },
   );
@@ -457,7 +469,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
         )}
         {termCount > 0 && (
           <span className="hint">
-            {termCount} priority term{termCount === 1 ? '' : 's'} go to the transcriber{termCount > 100 ? ' (Grok uses the first 100)' : ''}; the full lists are used to check the transcript afterwards.
+            {termCount} priority term{termCount === 1 ? '' : 's'} go to the transcriber, as many as it accepts (people and learned fixes first); the full lists are used to check the transcript afterwards.
           </span>
         )}
       </div>
@@ -475,6 +487,7 @@ function Setup({ project, providers, settings, presetRequest, onPresetSaved }) {
           <input type="checkbox" checked={draft.options.fillerWords} onChange={(e) => setOpt('fillerWords', e.target.checked)} /> Keep "um"/"uh"
         </label>
       </div>
+      {draft.provider === 'grok' && <SpeechSensitivity value={draft.options.speechSensitivity} onChange={(v) => setOpt('speechSensitivity', v)} />}
 
       {error && <div className="error">{error}</div>}
       {!hasKey(draft.provider) && (

@@ -65,10 +65,15 @@ export default function Review({ jobId }) {
 
   const unlikely = (s) => s.verified != null && s.verified < UNLIKELY;
   const unlikelyCount = (job?.suggestions ?? []).filter((s) => s.status === 'open' && unlikely(s)).length;
+  // Lines the second opinion heard where this transcript has none ("Possibly missed").
+  const missedLines = useMemo(
+    () => (job?.suggestions ?? []).filter((s) => s.status === 'open' && s.kind === 'insert-line').map((s) => ({ ...s, missed: true })),
+    [job],
+  );
   const openSuggestions = useMemo(() => {
     const map = new Map();
     for (const s of job?.suggestions ?? []) {
-      if (s.status !== 'open' || (!showUnlikely && unlikely(s))) continue;
+      if (s.status !== 'open' || s.kind === 'insert-line' || (!showUnlikely && unlikely(s))) continue;
       if (!map.has(s.cueId)) map.set(s.cueId, []);
       map.get(s.cueId).push(s);
     }
@@ -80,24 +85,26 @@ export default function Review({ jobId }) {
     for (const list of openSuggestions.values()) {
       for (const s of list) {
         const key = fixKey(s);
-        if (!groups.has(key)) groups.set(key, { key, first: s, cueIds: new Set(), tier: s.tier === 'usual' ? 'usual' : 'unsure' });
+        if (!groups.has(key)) groups.set(key, { key, first: s, cueIds: new Set(), count: 0, tier: s.tier === 'usual' ? 'usual' : 'unsure' });
         groups.get(key).cueIds.add(s.cueId);
+        groups.get(key).count++; // a line can hold several matches of the same fix
       }
     }
     return [...groups.values()].sort((a, b) => (a.tier === b.tier ? b.cueIds.size - a.cueIds.size : a.tier === 'usual' ? -1 : 1));
   }, [openSuggestions]);
-  const lowConfidence = (c) =>!c.edited && !c.reviewed && c.words?.some((w) => w.confidence != null && w.confidence < threshold);
-  const hasIssue = (c) => openSuggestions.has(c.id) || lowConfidence(c);
+  const lowConfidence = (c) => !c.missed && !c.edited && !c.reviewed && c.words?.some((w) => w.confidence != null && w.confidence < threshold);
+  const hasIssue = (c) => c.missed || openSuggestions.has(c.id) || lowConfidence(c);
 
+  // Lines plus "possibly missed" rows, in time order.
   const cues = useMemo(() => {
     if (!job) return [];
     const q = search.trim().toLowerCase();
-    return [...job.cues]
+    return [...job.cues, ...missedLines]
       .sort((a, b) => a.start - b.start || a.track - b.track)
       .filter((c) => trackFilter === 'all' || c.track === Number(trackFilter))
       .filter((c) => show === 'all' || hasIssue(c))
       .filter((c) => !q || c.text.toLowerCase().includes(q));
-  }, [job, trackFilter, show, search, threshold, openSuggestions]);
+  }, [job, trackFilter, show, search, threshold, openSuggestions, missedLines]);
 
   const say = (text) => {
     clearTimeout(toastTimer.current);
@@ -179,7 +186,7 @@ export default function Review({ jobId }) {
   if (!job) return <p className="muted">Loading…</p>;
 
   const provider = providers.transcribers.find((p) => p.id === job.provider);
-  const issueCount = job.cues.filter(hasIssue).length;
+  const issueCount = job.cues.filter(hasIssue).length + missedLines.length;
   const anyConfidence = job.tracks.some((t) => t.hasConfidence);
   const multiVideo = new Set(job.tracks.map((t) => t.mediaId)).size > 1;
   const trackName = (pos) => {
@@ -234,9 +241,16 @@ export default function Review({ jobId }) {
     act(async () => {
       const r = await api.post(`/api/jobs/${job.id}/suggestions/${s.id}/accept`, { all, to });
       const byId = new Map(r.cues.map((c) => [c.id, c]));
-      setJob((j) => ({ ...j, suggestions: r.suggestions, cues: j.cues.map((c) => byId.get(c.id) ?? c) }));
+      setJob((j) => {
+        const known = new Set(j.cues.map((c) => c.id));
+        // An added missed line is a brand-new cue.
+        return { ...j, suggestions: r.suggestions, cues: [...j.cues.map((c) => byId.get(c.id) ?? c), ...r.cues.filter((c) => !known.has(c.id))] };
+      });
       withUndo(r);
-      say(`Changed "${s.from}" to "${to || s.to}"${r.cues.length > 1 ? ` in ${r.cues.length} lines` : ''}`);
+      if (s.kind === 'insert-line') {
+        say(r.cues.length > 1 ? `Added ${r.cues.length} lines at ${formatTime(s.start)}` : `Added a line at ${formatTime(s.start)}`);
+        setSelected(r.cues[0]?.id ?? null);
+      } else say(`Changed "${s.from}" to "${to || s.to}"${r.cues.length > 1 ? ` in ${r.cues.length} lines` : ''}`);
     });
 
   const dismiss = (s) =>
@@ -244,7 +258,7 @@ export default function Review({ jobId }) {
       const r = await api.post(`/api/jobs/${job.id}/suggestions/${s.id}/dismiss`);
       setJob((j) => ({ ...j, suggestions: r.suggestions }));
       withUndo(r);
-      say(`Ignored "${s.from}"`);
+      say(s.kind === 'insert-line' ? `Ignored the possibly missed line at ${formatTime(s.start)}` : `Ignored "${s.from}"`);
     });
 
   const rebuild = () =>
@@ -367,7 +381,21 @@ export default function Review({ jobId }) {
               <audio ref={audio} onTimeUpdate={onTime} onPause={() => setPlaying(null)} />
 
               <ul className="cues">
-                {cues.slice(page * 100, (page + 1) * 100).map((c) => (
+                {cues.slice(page * 100, (page + 1) * 100).map((c) => c.missed ? (
+                  <MissedRow
+                    key={c.id}
+                    s={c}
+                    pending={pending || Boolean(editingCue)}
+                    selected={selected === c.id}
+                    onSelect={() => setSelected(c.id)}
+                    label={job.tracks.length > 1 ? trackName(c.track) : null}
+                    color={trackColor(c.track)}
+                    playing={playing === c.id}
+                    onPlay={() => play(c)}
+                    onAccept={accept}
+                    onDismiss={dismiss}
+                  />
+                ) : (
                   <CueRow
                     key={c.id}
                     cue={c}
@@ -404,9 +432,25 @@ export default function Review({ jobId }) {
             <div className="side-section to-review">
               <div className="row">
                 <h3 className="grow">To review</h3>
-                {reviewGroups.length > 0 && <span className="badge-count">{reviewGroups.length}</span>}
+                {reviewGroups.length + missedLines.length > 0 && <span className="badge-count">{reviewGroups.length + missedLines.length}</span>}
               </div>
+              {missedLines.length > 0 && (
+                <div className="tier-group missed">
+                  <div className="tier-head"><Icon name="plus" size={14} /> Possibly missed</div>
+                  {missedLines.slice(0, 12).map((s) => (
+                    <div key={s.id} className="tier-item">
+                      <button className="link-btn tier-jump" title="Show where" onClick={() => jumpTo(s.id)}>
+                        <span className="tier-fix">"{s.text}"</span>
+                        <span className="tier-meta">at {timecode(s.start)}{job.tracks.length > 1 ? ` · ${trackName(s.track)}` : ''} · {s.sourceLabel} heard it</span>
+                      </button>
+                      <button className="small" disabled={pending || Boolean(editingCue)} onClick={() => accept(s, false)}>Add</button>
+                    </div>
+                  ))}
+                  {missedLines.length > 12 && <p className="muted small">+{missedLines.length - 12} more in the transcript</p>}
+                </div>
+              )}
               {!reviewGroups.length ? (
+                missedLines.length ? null :
                 <p className="muted small">{checking ? 'Checking for mistakes…' : 'Nothing flagged. Nice.'}</p>
               ) : (
                 ['usual', 'unsure'].map((tier) => {
@@ -421,8 +465,8 @@ export default function Review({ jobId }) {
                             <span className="tier-fix">{g.first.from} → {g.first.to}</span>
                             <span className="tier-meta">{plural(g.cueIds.size, 'line')} · {g.first.source === 'learned' || g.first.source === 'people' ? g.first.reason : sourceName(g.first)}</span>
                           </button>
-                          <button className={tier === 'usual' ? 'small gold' : 'small'} disabled={pending || Boolean(editingCue)} onClick={() => accept(g.first, g.cueIds.size > 1)}>
-                            {g.cueIds.size > 1 ? `Fix all ${g.cueIds.size}` : 'Fix'}
+                          <button className={tier === 'usual' ? 'small gold' : 'small'} disabled={pending || Boolean(editingCue)} onClick={() => accept(g.first, g.count > 1)}>
+                            {g.count > 1 ? `Fix all ${g.count}` : 'Fix'}
                           </button>
                         </div>
                       ))}
@@ -499,7 +543,10 @@ export default function Review({ jobId }) {
                   {running(job.proofread)
                     ? `Reading… ${Math.round((job.proofread.progress || 0) * 100)}%`
                     : job.proofread?.status === 'done'
-                      ? `${plural(job.proofread.count, 'suggestion')} · ${job.proofread.by}`
+                      ? <>
+                          {`${plural(job.proofread.count, 'suggestion')} · ${job.proofread.by}`}
+                          {job.proofread.warning && <><br /><span className="warn-text">{job.proofread.warning}</span></>}
+                        </>
                       : job.proofread?.status === 'error'
                         ? <span className="error-text">{job.proofread.error}</span>
                         : hasProofreadKey
@@ -676,11 +723,51 @@ function CueRow({ cue, label, color, lowConfidence, suggestions, allSuggestions,
   );
 }
 
+// Words the second opinion heard where this transcript has no line. Add makes it a real line (undoable).
+function MissedRow({ s, label, color, pending, selected, playing, onSelect, onPlay, onAccept, onDismiss }) {
+  const [text, setText] = useState(s.text);
+  const edited = text.trim() !== s.text;
+  return (
+    <li id={`cue-${s.id}`} onFocus={onSelect} className={`cue missed-line ${playing ? 'playing' : ''} ${selected ? 'selected-cue' : ''}`}>
+      <button className="tc" onClick={onPlay} title={playing ? 'Stop' : 'Play this moment'}>
+        <Icon name={playing ? 'pause' : 'play'} size={12} />
+        {timecode(s.start)}
+      </button>
+      <div className="cue-body">
+        <div className="cue-line">
+          {label && <span className="speaker" style={{ background: color }} title={label}>{label}</span>}
+          <span className="missed-title"><Icon name="plus" size={14} /> Possibly missed at {formatTime(s.start)}</span>
+        </div>
+        <div className="sug missed-sug">
+          <input
+            className={`sug-to ${edited ? 'changed' : ''}`}
+            value={text}
+            aria-label={`Text of the possibly missed line at ${timecode(s.start)}`}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && text.trim()) onAccept(s, false, text.trim());
+              if (e.key === 'Escape') setText(s.text);
+            }}
+            title="Edit the text, then Add"
+          />
+          <span className="sug-meta">{s.reason}</span>
+          <span className="grow" />
+          <div className="sug-actions">
+            <button className="soft small" disabled={pending || !text.trim()} onClick={() => onAccept(s, false, text.trim())}>Add line</button>
+            <button className="ghost small" disabled={pending} onClick={() => onDismiss(s)}>Ignore</button>
+          </div>
+        </div>
+      </div>
+      <div className="cue-actions" />
+    </li>
+  );
+}
+
 // One suggested fix. The replacement is editable before you apply it.
 function Suggestion({ s, pending, allSuggestions, onAccept, onDismiss }) {
   const [to, setTo] = useState(s.to);
   const norm = text => text.trim().toLowerCase().replace(/\s+/g,' ');
-  const same = new Set(allSuggestions.filter(x => x.status === 'open' && norm(x.from) === norm(s.from) && norm(x.to) === norm(s.to)).map(x => x.cueId)).size;
+  const same = new Set(allSuggestions.filter(x => x.status === 'open' && norm(x.from) === norm(s.from) && norm(x.to) === norm(s.to)).map(x => x.id)).size;
   const edited = to.trim() !== s.to;
   const source = sourceName(s);
   const tier = ['learned', 'people'].includes(s.source) ? (s.tier === 'usual' ? 'usual' : 'unsure') : null;

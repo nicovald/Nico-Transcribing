@@ -2,6 +2,18 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
 
+## 1.1.0 (2026-10-14)
+Accuracy release: fewer missed words and more of your names reach the transcriber.
+- **Catch quiet speech** (Grok): a new setting that stops Grok from skipping quiet or far-off talking. Grok ignores audio it thinks isn't speech; "More" and "Most" lower that bar. Normal keeps today's behaviour.
+- **Possibly missed lines**: when a second opinion hears words where your transcript has no subtitle, Review shows "Possibly missed at 12:34" with **Add line**. Second opinion also suggests words missing inside a line ("Get stone" → "Get more stone").
+- **More of your terms reach the transcriber**: people names go first, then usual learned fixes, then a fair share of every ticked term list, sized to each service's real limit. Each transcript shows "N of M terms sent".
+- **Fix changes only the flagged word**, not every copy of it in the line. Fixing one word no longer hides other suggestions on that line.
+- Subtitle lines no longer end early when two people talk over each other, and the last line stops at the end of the video.
+- Smarter sound-alike name matching ("Kraner" → "Crainer"), and term list imports keep quoted names with commas together.
+- AI proofread checks each track on its own with a little earlier context, marks words the service was unsure of, and keeps the parts that worked if one part fails.
+- OpenAI: 10-minute pieces now overlap so words on a cut aren't lost; vocabulary fits Whisper's prompt limit with names first.
+- Deepgram no longer rejects jobs with long term lists. ElevenLabs no longer fails a whole track over one word without timing. AssemblyAI model overrides use the current API.
+
 ## 1.0.0 (2026-09-28)
 - **First public release.** Same app as 0.18.0, now open to everyone: download it, and it updates itself with no GitHub account or token.
 - The GitHub repository is now **nicovald/Nico-Transcribing**. Older installs keep updating through GitHub's redirect.

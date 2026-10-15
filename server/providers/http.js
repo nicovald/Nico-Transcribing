@@ -5,7 +5,10 @@ import { Agent, fetch as undiciFetch, FormData } from 'undici';
 
 // Batch transcription of long audio can take many minutes before the first
 // response byte, so lift undici's default 5-minute header/body timeouts.
-const dispatcher = new Agent({ headersTimeout: 60 * 60 * 1000, bodyTimeout: 60 * 60 * 1000, connectTimeout: 30_000 });
+let dispatcher = new Agent({ headersTimeout: 60 * 60 * 1000, bodyTimeout: 60 * 60 * 1000, connectTimeout: 30_000 });
+
+// Tests swap in an undici MockAgent to check request bodies without network calls.
+export const setDispatcher = (d) => { dispatcher = d; };
 
 export { FormData };
 
@@ -94,11 +97,73 @@ export const sleep = (ms, signal) =>
     signal?.addEventListener('abort', abort, { once: true });
   });
 
-// Parse the comma/newline separated keyterm setting into a clean list.
-export function parseKeyterms(raw, { max = 100, maxLen = 50 } = {}) {
-  return String(raw || '')
-    .split(/[\n,]/)
-    .map((t) => t.trim())
-    .filter((t) => t && t.length <= maxLen)
-    .slice(0, max);
+// Split a comma/newline separated keyterm setting (or an array of terms) into clean terms.
+// Double quotes keep a comma inside one term: "Bucket of Salmon, Raw", Sundee.
+export function splitKeyterms(raw) {
+  if (Array.isArray(raw)) return raw.map((t) => String(t ?? '').trim()).filter(Boolean);
+  const text = String(raw || '');
+  // An unmatched quote would swallow everything after it, so then split plainly.
+  if ((text.match(/"/g) || []).length % 2) return text.split(/[,\r\n]/).map((t) => t.trim()).filter(Boolean);
+  const out = [];
+  let term = '';
+  let quoted = false;
+  for (const ch of text) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && /[,\r\n]/.test(ch)) { out.push(term); term = ''; }
+    else term += ch;
+  }
+  out.push(term);
+  return out.map((t) => t.trim()).filter(Boolean);
+}
+
+// Conservative token count for budget checks (meant as an upper bound, not an average):
+// each run of ASCII letters costs the larger of ceil(len/3) and one token per vowel group and per
+// consonant cluster (a cluster over 3 letters, like the "qzqz" in a handle, costs one per letter
+// because no merge exists for it), every digit or ASCII symbol costs 1, any other
+// character costs its UTF-8 byte length (a byte-level tokenizer never needs more), and a single
+// space is free (it merges into the next piece). So a handle like "X10Y10Z10" costs 9, not 3.
+const letterRunTokens = (run) => {
+  let clusters = 0;
+  for (const [g] of run.matchAll(/[aeiouy]+|[^aeiouy]+/gi)) clusters += /^[aeiouy]/i.test(g) || g.length <= 3 ? 1 : g.length;
+  return Math.max(Math.ceil(run.length / 3), clusters);
+};
+export function countTokens(text) {
+  let n = 0;
+  for (const [piece] of String(text ?? '').matchAll(/[A-Za-z]+|[\s\S]/gu)) {
+    if (piece === ' ') continue;
+    if (/^[A-Za-z]/.test(piece)) n += letterRunTokens(piece);
+    else if (piece.length === 1 && piece.charCodeAt(0) < 128) n += 1;
+    else n += Buffer.byteLength(piece, 'utf8');
+  }
+  return n;
+}
+
+// A term's cost inside a list: its tokens plus one for the separator.
+export const estimateTokens = (term) => countTokens(term) + 1;
+
+// A provider declares its keyterm rules as `keyterms: { max, maxChars, maxWords, maxTokens, overheadTokens, banned }`,
+// or as a function of the model when they differ per model. overheadTokens is fixed text sent
+// with the list (e.g. a prompt prefix) that counts against maxTokens.
+export const keytermLimits = (provider, model, options = {}) =>
+  (typeof provider?.keyterms === 'function' ? provider.keyterms(model || '', options) : provider?.keyterms) || {};
+
+// Fit an ordered term list (most important first) into a provider's limits.
+// Duplicates are dropped case-insensitively; terms that break a rule are skipped, and later
+// shorter terms may still fill a token budget. Returns { terms, total } (total = unique terms).
+export function limitKeyterms(raw, { max = Infinity, maxChars = Infinity, maxWords = Infinity, maxTokens = Infinity, overheadTokens = 0, banned = null } = {}) {
+  const seen = new Set();
+  const terms = [];
+  let tokens = overheadTokens;
+  for (const term of splitKeyterms(raw)) {
+    const key = term.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (terms.length >= max) continue;
+    if (term.length > maxChars || term.split(/\s+/).length > maxWords || banned?.test(term)) continue;
+    const cost = estimateTokens(term);
+    if (tokens + cost > maxTokens) continue;
+    tokens += cost;
+    terms.push(term);
+  }
+  return { terms, total: seen.size };
 }

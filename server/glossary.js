@@ -2,6 +2,8 @@
 // term but are spelled differently ("Couples Stone" ~ "Cobblestone", "silicone" ~ "Silicon").
 // Works on thousands of terms without any API call.
 
+import { occurrenceFor, phraseRanges, textTokens } from './ranges.js';
+
 // A rough phonetic key: similar-sounding consonants share a code, vowels are dropped
 // (except a leading one), repeats collapse. "cobblestone" and "couples stone" both -> KPLSTN.
 export function soundKey(text) {
@@ -48,12 +50,20 @@ function lcsLength(a, b) {
   return prev[b.length];
 }
 
-// Beyond sounding alike, a real mishearing keeps the first letter, covers most of the
+// The sound a word starts with, so "Kraner"/"Crainer", "Fil"/"Phil", "Jeff"/"Geoff" count as the same start.
+function leadSound(s) {
+  if (/^ph/.test(s)) return 'f';
+  if (/^wh/.test(s)) return 'w';
+  if (/^c[eiy]/.test(s)) return 's'; // soft c
+  return { c: 'k', q: 'k', z: 's', j: 'g', y: 'i' }[s[0]] || s[0];
+}
+
+// Beyond sounding alike, a real mishearing keeps the first sound, covers most of the
 // term, and has a similar vowel pattern ("strange" is not a mishearing of "String").
 function looksAlike(phrase, term, maxDist = 0.35, allowSame = false) {
   const a = letters(phrase);
   const b = letters(term);
-  if (a[0] !== b[0]) return false;
+  if (a[0] !== b[0] && leadSound(a) !== leadSound(b)) return false;
   if (Math.min(a.length, b.length) / Math.max(a.length, b.length) < 0.75) return false;
   const dist = levenshtein(a, b);
   if ((dist === 0 && !allowSame) || dist / Math.max(a.length, b.length) > maxDist) return false;
@@ -80,15 +90,31 @@ export function glossaryCheck(cues, terms, { names = false } = {}) {
     if (letters(t).length < minLetters) continue;
     const key = soundKey(t);
     if (key.replace('A', '').length < minKey) continue; // short keys match too many ordinary words
-    if (!byKey.has(key)) byKey.set(key, t);
+    // Several terms can share a sound key ("Kroner", "Crainer"); keep them all, in list order
+    // (priority terms come first, so they win ties).
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(t);
     exact.add(letters(t));
   }
   if (!byKey.size) return [];
+  // The closest-spelled candidate that still looks like a mishearing of it.
+  const pick = (base, key, allowSame) => {
+    let best = null, bestDist = Infinity;
+    for (const t of byKey.get(key) || []) {
+      if (!looksAlike(base, t, maxDist, allowSame)) continue;
+      const d = levenshtein(letters(base), letters(t));
+      if (d < bestDist) (best = t), (bestDist = d);
+    }
+    return best;
+  };
 
   const out = [];
   for (const cue of cues) {
-    if (cue.edited) continue;
-    const words = cue.text.split(/\s+/).filter(Boolean);
+    // Phrases the user already accepted or typed on this cue (cue.locked) are left alone, matched by
+    // character range. Older edited cues have no `locked` list and are skipped entirely, as before.
+    if (cue.edited && !Array.isArray(cue.locked)) continue;
+    const tokens = textTokens(cue.text);
+    const words = tokens.map((t) => t.text);
     const taken = new Array(words.length).fill(false);
     // Longest phrases first, so "Couples Stone" wins over "Stone".
     for (let n = 4; n >= 1; n--) {
@@ -98,17 +124,19 @@ export function glossaryCheck(cues, terms, { names = false } = {}) {
         const flat = letters(phrase);
         if (!flat || (exact.has(flat) && !(names && n > 1))) continue;
         if (n === 1 && COMMON.has(flat)) continue;
+        const at = phraseRanges(cue.text, phrase).findIndex(([st]) => st >= tokens[i].start && st < tokens[i].end);
+        const occurrence = at < 0 ? -1 : occurrenceFor(cue, phrase, at);
+        if (occurrence < 0) continue; // overlaps words the user set by hand
         let base = phrase, suffix = '';
-        let term = byKey.get(soundKey(phrase));
+        let term = pick(phrase, soundKey(phrase), names && n > 1);
         const possessive = names && !term && phrase.match(/^(.+?)('s|s)$/iu);
         if (possessive && !exact.has(letters(possessive[1]))) {
           base = possessive[1];
           suffix = "'s";
-          term = byKey.get(soundKey(base));
+          term = pick(base, soundKey(base), names && n > 1);
         }
         if (!term) continue;
-        if (!looksAlike(base, term, maxDist, names && n > 1)) continue;
-        out.push({ cueId: cue.id, from: phrase, to: term + suffix, reason: 'Sounds like a glossary term' });
+        out.push({ cueId: cue.id, from: phrase, to: term + suffix, occurrence, reason: 'Sounds like a glossary term' });
         for (let k = i; k < i + n; k++) taken[k] = true;
       }
     }
@@ -131,7 +159,7 @@ export function termPicker(terms) {
     if (!byWord.has(k)) byWord.set(k, new Set());
     byWord.get(k).add(t);
   };
-  const byPhraseKey = new Map(); // whole-term sound key -> term
+  const byPhraseKey = new Map(); // whole-term sound key -> terms sharing it
   for (const t of terms) {
     for (const w of tokenize(t)) {
       if (!informative(w)) continue;
@@ -140,7 +168,9 @@ export function termPicker(terms) {
       if (k.replace('A', '').length >= 3) add(`#${k}`, t);
     }
     const pk = soundKey(t);
-    if (pk.replace('A', '').length >= 4) byPhraseKey.set(pk, t);
+    if (pk.replace('A', '').length < 4) continue;
+    if (!byPhraseKey.has(pk)) byPhraseKey.set(pk, []);
+    byPhraseKey.get(pk).push(t);
   }
 
   return (text, max = 400) => {
@@ -151,8 +181,14 @@ export function termPicker(terms) {
       bump(byWord.get(words[i]), 3);
       bump(byWord.get(`#${soundKey(words[i])}`), 1);
       for (let n = 1; n <= 4 && i + n <= words.length; n++) {
-        const t = byPhraseKey.get(soundKey(words.slice(i, i + n).join('')));
-        if (t) score.set(t, (score.get(t) || 0) + 4);
+        const phrase = words.slice(i, i + n).join('');
+        const candidates = byPhraseKey.get(soundKey(phrase));
+        if (!candidates) continue;
+        // Every term with this sound is worth showing; the closest spelling ranks highest
+        // (the first one in list order on a tie, so priority terms win).
+        const dist = candidates.map((t) => levenshtein(letters(phrase), letters(t)));
+        const best = candidates[dist.indexOf(Math.min(...dist))];
+        for (const t of candidates) score.set(t, (score.get(t) || 0) + (t === best ? 4 : 3));
       }
     }
     return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, max).map(([t]) => t);
@@ -172,7 +208,34 @@ export function parseTermList(text) {
       // Not JSON after all; fall through to line parsing.
     }
   }
-  return dedupe(trimmed.split(/[\r\n,;\t]+/).map((t) => t.replace(/^["']|["']$/g, '')));
+  return dedupe(splitCells(trimmed));
+}
+
+// Splits on newlines, commas, semicolons and tabs, but a "quoted, cell" stays one term
+// ("Bucket of Salmon, Raw"); "" inside quotes is a literal quote, as in CSV.
+function splitCells(text) {
+  const out = [];
+  let cell = '', quoted = false, wasQuoted = false;
+  const end = () => {
+    out.push(wasQuoted ? cell : cell.replace(/^\s*["']|["']\s*$/g, ''));
+    cell = '';
+    wasQuoted = false;
+  };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') (cell += '"'), i++;
+      else if (ch === '"') quoted = false;
+      else if (ch === '\n' || ch === '\r') (quoted = false), end(); // a stray quote never swallows the next lines
+      else cell += ch;
+    } else if (ch === '"' && !cell.trim()) {
+      quoted = wasQuoted = true;
+      cell = '';
+    } else if (/[\r\n,;\t]/.test(ch)) end();
+    else cell += ch;
+  }
+  end();
+  return out;
 }
 
 function dedupe(list) {

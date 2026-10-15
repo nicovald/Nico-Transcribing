@@ -36,13 +36,14 @@ const media = {id:crypto.randomUUID(),projectId:project.id,name:path.basename(so
 store.saveMedia(media);
 for (const track of media.tracks) await (await import('../server/ffmpeg.js')).extractTrack(source,track.index,jobs.trackAudioPath(media.id,track.index));
 const job = jobs.createJob({projectId:project.id,provider:'grok',tracks:media.tracks.map(t=>({mediaId:media.id,index:t.index,label:t.title})),options:{voiceCleanup:false,language:'en'}});
-job.status = 'done'; job.tracks.forEach(t=>Object.assign(t,{status:'done',wordCount:480,language:'en'})); store.saveJob(job);
+job.status = 'done'; job.keytermsSent = 9; job.keytermsTotal = 9; job.tracks.forEach(t=>Object.assign(t,{status:'done',wordCount:480,language:'en'})); store.saveJob(job);
 const phrases = ['Let’s build the starter house over here.','We need a little more couples stone.','I’ll collect the wood while you finish the roof.','There’s red stone down in the cave.','Sunday, meet me back at the crafting table.'];
 jobs.writeCues(job.id,Array.from({length:120},(_,i)=>({id:`${i%2}-${i}`,track:i%2,start:i*2,end:i*2+1.8,text:phrases[i%5],words:[],edited:false})));
 jobs.writeSuggestions(job.id,[
   ...[1,6].map(i=>({id:`s-smoke-${i}`,cueId:`${i%2}-${i}`,from:'couples stone',to:'Cobblestone',source:'learned',tier:'usual',reason:'Fixed 9 of 10 times before',status:'open'})),
   {id:'s-smoke-name',cueId:'0-4',from:'Sunday',to:'SSundee',source:'people',tier:'unsure',reason:'Often misheard name',status:'open'},
   {id:'s-smoke-red',cueId:'1-3',from:'red stone',to:'Redstone',source:'learned',tier:'unsure',reason:'Fixed 2 of 2 times before',status:'open'},
+  {id:'s-smoke-missed',kind:'insert-line',cueId:null,track:0,start:2.1,end:3.6,text:'Wait, grab the torches first',from:'',to:'Wait, grab the torches first',words:[],source:'compare',sourceLabel:'ElevenLabs Scribe',reason:'ElevenLabs Scribe heard words here that have no subtitle',status:'open'},
 ]);
 const fixture = {projectId:project.id,jobId:job.id,source};
 // Electron 44 downloads lazily through its Node entry point after a clean npm ci.

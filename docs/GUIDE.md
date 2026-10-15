@@ -7,12 +7,12 @@
 - **Presets** per series or recording setup ("Minecraft vanilla", "ATM10 To The Sky"): description, term lists, player names, language, provider and track layout ("Track 1 = host mic, Track 3 = game audio, skip"). Pick one before dropping videos and the project comes pre-filled; create them from any project with **Save as new preset**.
 - **Projects**: drop one or more videos (multicam) and rename the project and each video for your own tracking. Your actual files are never renamed or moved.
 - Every audio track is pulled out automatically. Name them ("Host mic", "Game audio") and tick the ones to transcribe.
-- Transcribe with **Grok (xAI)**, **Deepgram**, **AssemblyAI**, **ElevenLabs Scribe** or **OpenAI Whisper**. The language and options you pick are remembered.
+- Transcribe with **Grok (xAI)**, **Deepgram**, **AssemblyAI**, **ElevenLabs Scribe** or **OpenAI Whisper**. The language and options you pick are remembered. If Grok leaves out quiet or far-off talking, set **Catch quiet speech** to More or Most (it may add a few stray words from noise).
 - **Find mistakes** like "Couples Stone" → "Cobblestone":
-  - **Term lists** per game or modpack. Each has *priority terms* (up to ~100, sent to the transcriber) and *all terms* (unlimited, e.g. every Minecraft item). One click adds every vanilla Minecraft name (~1,850, from PrismarineJS/minecraft-data); drop .txt/.csv/.json files for modpacks.
+  - **Term lists** per game or modpack. Each has *priority terms* (sent to the transcriber; people names and usual learned fixes go first, then a fair share of each ticked list, up to each service's limit, and the transcript shows how many were sent) and *all terms* (unlimited, e.g. every Minecraft item). One click adds every vanilla Minecraft name (~1,850, from PrismarineJS/minecraft-data); drop .txt/.csv/.json files for modpacks.
   - **Glossary check** (free, instant) flags phrases that sound like a term but are spelled differently, using a phonetic key plus spelling/vowel checks to avoid flagging ordinary words.
   - **AI proofread** (Claude, OpenAI or Grok) reads the transcript with your project description and suggests fixes. You click **Fix** or **Fix all**.
-  - **Compare** transcribes again with a second service and flags every word the two disagree on.
+  - **Compare** transcribes again with a second service and flags every word the two disagree on, words missing inside a line, and whole lines it heard where you have no subtitle ("Possibly missed" → Add line).
   - Optional **Jev (TypeSafe)** check scores each suggested fix with a confidence %.
 - **Review**: edit any line, edit a suggested fix before applying it, and **Undo** (button, toast or Ctrl+Z) any fix, ignore, edit or delete. Use J/K for the next/previous issue, Space on a focused timecode to play, and the speed selector to slow down or speed up playback. Long transcripts show 100 lines per page.
 - **Safe export**: preview one SRT per track plus a merged SRT per video, choose the files to save, and keep both versions or explicitly replace existing files.

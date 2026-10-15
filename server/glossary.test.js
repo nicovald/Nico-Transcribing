@@ -48,3 +48,46 @@ test('termPicker sends only related names from a big list', () => {
   assert.ok(!picked.includes('Silicon Press'));
   assert.ok(picked.length < 20, `picked ${picked.length}`);
 });
+
+test('glossaryCheck picks the closest of several terms sharing a sound', () => {
+  for (const terms of [['Kroner', 'Crainer'], ['Crainer', 'Kroner']]) {
+    assert.deepEqual(glossaryCheck([cue('a', 'Crayner did it.')], terms).map((f) => f.to), ['Crainer'], terms.join());
+    assert.deepEqual(glossaryCheck([cue('a', 'Crayner did it.')], terms, { names: true }).map((f) => f.to), ['Crainer'], terms.join());
+  }
+});
+
+test('termPicker keeps every term sharing a sound, closest first', () => {
+  for (const terms of [['Kroner', 'Crainer'], ['Crainer', 'Kroner']]) {
+    const picked = termPicker(terms)('Crayner is here');
+    assert.equal(picked[0], 'Crainer', terms.join());
+    assert.ok(picked.includes('Kroner'));
+  }
+});
+
+test('glossaryCheck accepts first letters that sound the same', () => {
+  assert.deepEqual(glossaryCheck([cue('a', 'Kraner did it.')], ['Crainer']).map((f) => [f.from, f.to]), [['Kraner', 'Crainer']]);
+});
+
+test('glossaryCheck checks edited cues but leaves locked phrases alone', () => {
+  const edited = (id, text, locked) => ({ ...cue(id, text), edited: true, locked });
+  // Old edited cues (no locked list) are skipped as before.
+  assert.deepEqual(glossaryCheck([edited('a', 'Destroy Couples Stone!')], MINECRAFT), []);
+  // With a locked list, only the accepted phrase is protected.
+  const found = glossaryCheck([edited('a', 'Destroy Couples Stone and silicone!', ['couples stone'])], MINECRAFT);
+  assert.deepEqual(found.map((f) => [f.from, f.to]), [['silicone', 'Silicon']]);
+  assert.deepEqual(glossaryCheck([edited('b', 'Destroy Couples Stone!', [])], MINECRAFT).map((f) => f.to), ['Cobblestone']);
+});
+
+test('parseTermList keeps quoted CSV cells with commas together', () => {
+  assert.deepEqual(parseTermList('"Bucket of Salmon, Raw",Stone\n"Say ""Hi""";Dirt'), ['Bucket of Salmon, Raw', 'Stone', 'Say "Hi"', 'Dirt']);
+  assert.deepEqual(parseTermList('"Unclosed, quote\nSand'), ['Unclosed, quote', 'Sand']);
+});
+
+test('glossary locks use matched character ranges and name the occurrence', () => {
+  const partial = { id: 'a', text: 'Couples stone wall', edited: true, locked: ['stone wall'], words: [] };
+  assert.deepEqual(glossaryCheck([partial], ['Cobblestone']), []);
+  const two = { id: 'b', text: 'Kraner called Kraner', edited: true, locked: ['Kraner called'], words: [] };
+  const found = glossaryCheck([two], ['Crainer']);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].occurrence, 1);
+});

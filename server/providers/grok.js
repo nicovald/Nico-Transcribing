@@ -1,5 +1,9 @@
 // xAI Grok Voice Transcribe — https://docs.x.ai/developers/model-capabilities/audio/speech-to-text
-import { fileBlob, FormData, parseKeyterms, request } from './http.js';
+import { fileBlob, FormData, keytermLimits, limitKeyterms, request } from './http.js';
+
+// Speech sensitivity -> vad_threshold. Segments scoring below it are skipped as non-speech;
+// Grok's default is 0.5 ("normal"), so that one is not sent.
+export const VAD_THRESHOLDS = { more: 0.3, most: 0.15 };
 
 export default {
   id: 'grok',
@@ -7,6 +11,8 @@ export default {
   model: 'grok-voice-transcribe-2.0',
   keyUrl: 'https://console.x.ai/',
   notes: '$0.10/hr. Word timestamps + speakers, but no per-word confidence scores.',
+  // Up to 100 key terms, each at most 50 characters.
+  keyterms: { max: 100, maxChars: 50 },
 
   async transcribe({ file, key, model, options, signal }) {
     const form = new FormData();
@@ -18,7 +24,9 @@ export default {
     }
     if (options.diarize) form.append('diarize', 'true');
     if (options.fillerWords) form.append('filler_words', 'true');
-    for (const term of parseKeyterms(options.keyterms)) form.append('keyterm', term);
+    for (const term of limitKeyterms(options.keyterms, keytermLimits(this, model)).terms) form.append('keyterm', term);
+    const vad = VAD_THRESHOLDS[options.speechSensitivity];
+    if (vad != null) form.append('vad_threshold', String(vad));
     // xAI requires `file` to be the last multipart field.
     form.append('file', await fileBlob(file), 'audio.flac');
 
@@ -33,7 +41,7 @@ export default {
     return {
       language: data.language ?? null,
       words: words.map((w) => ({
-        text: w.text ?? w.word ?? '',
+        text: w.text || w.word || '',
         start: w.start,
         end: w.end,
         confidence: w.confidence ?? null,

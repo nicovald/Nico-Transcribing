@@ -15,8 +15,24 @@ const blank = (settings) => ({
   voiceCleanup: true,
   diarize: false,
   fillerWords: false,
+  speechSensitivity: 'normal',
   tracks: [],
 });
+
+// Grok's vad_threshold, in editor words. Only Grok uses it.
+export function SpeechSensitivity({ value, onChange }) {
+  return (
+    <label>
+      Catch quiet speech
+      <select value={value || 'normal'} onChange={(e) => onChange(e.target.value)}>
+        <option value="normal">Normal</option>
+        <option value="more">More (quiet or far-off voices)</option>
+        <option value="most">Most (whispers)</option>
+      </select>
+      <span className="hint">Grok only. Higher settings catch quieter talking but may add stray words from background noise.</span>
+    </label>
+  );
+}
 
 // Presets save themselves, separate from the Settings form.
 export default function Presets() {
@@ -146,6 +162,7 @@ function PresetCard({ preset: p, settings, providers, onChange, onDelete }) {
             <label><input type="checkbox" checked={p.diarize} onChange={(e) => onChange({ diarize: e.target.checked })} /> Split by speaker</label>
             <label><input type="checkbox" checked={p.fillerWords} onChange={(e) => onChange({ fillerWords: e.target.checked })} /> Keep "um"/"uh"</label>
           </div>
+          {p.provider === 'grok' && <SpeechSensitivity value={p.speechSensitivity} onChange={(speechSensitivity) => onChange({ speechSensitivity })} />}
           <div>
             <div className="label-like">
               Track layout <span className="hint-inline">names for audio tracks 1, 2, 3… Untick tracks to skip, like game audio</span>

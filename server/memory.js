@@ -7,6 +7,7 @@ import path from 'node:path';
 import * as store from './store.js';
 import { COMMON, glossaryCheck } from './glossary.js';
 import { badRequest } from './validation.js';
+import { occurrenceFor } from './transcript.js';
 
 const FILE = path.join(store.DATA_DIR, 'memory.json');
 const EMPTY = { people: [], fixes: [] };
@@ -57,16 +58,21 @@ const words = (s) => s.split(/\s+/).filter(Boolean);
 const bare = (w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 const edgeTrim = (s) => s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 
-// A hand edit that swaps a few words ("couples stone" -> "Cobblestone") is a fix worth remembering.
-// Rewrites of a whole line are not: only 1-2 short changed spans count.
-export function learnedFromEdit(before, after) {
+// The words a hand edit changed: common start and end trimmed off, any length.
+// `to` is what the user typed (index.js locks it on the cue); either side may be empty.
+export function changedSpan(before, after) {
   const a = words(before), b = words(after);
   let s = 0;
   while (s < a.length && s < b.length && bare(a[s]) === bare(b[s])) s++;
   let e = 0;
   while (e < a.length - s && e < b.length - s && bare(a[a.length - 1 - e]) === bare(b[b.length - 1 - e])) e++;
-  const from = edgeTrim(a.slice(s, a.length - e).join(' '));
-  const to = edgeTrim(b.slice(s, b.length - e).join(' '));
+  return { from: edgeTrim(a.slice(s, a.length - e).join(' ')), to: edgeTrim(b.slice(s, b.length - e).join(' ')) };
+}
+
+// A hand edit that swaps a few words ("couples stone" -> "Cobblestone") is a fix worth remembering.
+// Rewrites of a whole line are not: only 1-2 short changed spans count.
+export function learnedFromEdit(before, after) {
+  const { from, to } = changedSpan(before, after);
   const n = (x) => words(x).length;
   if (!from || !to || n(from) > 4 || n(to) > 4) return null;
   return { from, to };
@@ -78,27 +84,31 @@ export function memoryCheck(cues, memory = getMemory()) {
   const out = [];
   const seen = new Set();
   const push = (s) => {
-    const k = `${s.cueId}|${norm(s.from)}`;
+    const k = `${s.cueId}|${norm(s.from)}|${s.occurrence ?? 0}`;
     if (!seen.has(k)) { seen.add(k); out.push(s); }
   };
   const fixes = memory.fixes.map((f) => ({ ...f, tier: tierOf(f) })).filter((f) => f.tier);
   const people = memory.people.flatMap((p) => p.heardAs.map((h) => ({ from: h, to: p.name, person: p })));
   const phraseRe = (from) => new RegExp(`(?<![\\p{L}\\p{N}])${from.trim().split(/\s+/).map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')}(?![\\p{L}\\p{N}])`, 'iu');
-  for (const cue of cues) {
-    if (cue.edited) continue;
+  // Every match the user has not locked (cue.locked: words they accepted or typed), with its index.
+  const freeMatches = (cue, from) => {
+    const all = [...cue.text.matchAll(new RegExp(phraseRe(from).source, 'giu'))];
+    return all.map((m, i) => ({ text: m[0].replace(/\s+/g, ' '), occurrence: i })).filter((m) => occurrenceFor(cue, from, m.occurrence) >= 0);
+  };
+  // Lines edited before locked phrases existed are skipped: we cannot tell which words the user typed.
+  const checkable = cues.filter((c) => !c.edited || Array.isArray(c.locked));
+  for (const cue of checkable) {
     for (const f of fixes) {
-      const m = cue.text.match(phraseRe(f.from));
-      if (!m || m[0].replace(/\s+/g, ' ') === f.to) continue;
-      push({ cueId: cue.id, from: m[0].replace(/\s+/g, ' '), to: f.to, tier: f.tier, source: 'learned', sourceLabel: 'Learned', reason: `Fixed ${f.fixed} of ${f.fixed + f.ignored} times before` });
+      for (const m of freeMatches(cue, f.from)) if (m.text !== f.to) push({ cueId: cue.id, from: m.text, to: f.to, occurrence: m.occurrence, tier: f.tier, source: 'learned', sourceLabel: 'Learned', reason: `Fixed ${f.fixed} of ${f.fixed + f.ignored} times before` });
     }
     for (const h of people) {
-      const m = cue.text.match(phraseRe(h.from));
-      if (m) push({ cueId: cue.id, from: m[0].replace(/\s+/g, ' '), to: h.to, tier: 'unsure', source: 'people', sourceLabel: 'People', reason: `Often misheard name` });
+      for (const m of freeMatches(cue, h.from)) push({ cueId: cue.id, from: m.text, to: h.to, occurrence: m.occurrence, tier: 'unsure', source: 'people', sourceLabel: 'People', reason: `Often misheard name` });
     }
   }
   const names = memory.people.map((p) => p.name);
   if (names.length) {
-    for (const g of glossaryCheck(cues, names, { names: true })) push({ ...g, tier: 'unsure', source: 'people', sourceLabel: 'People', reason: 'Sounds like a name on your people list' });
+    // glossaryCheck matches by character range, skips locked words and names the occurrence.
+    for (const g of glossaryCheck(checkable, names, { names: true })) push({ ...g, tier: 'unsure', source: 'people', sourceLabel: 'People', reason: 'Sounds like a name on your people list' });
   }
   return out;
 }

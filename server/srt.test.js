@@ -54,3 +54,50 @@ test('max words per line limits each line, not just characters', async () => {
   const two = buildCues(words, { maxLineChars: 42, maxLines: 2, maxLineWords: 3, maxDuration: 20 }).map((c) => c.text);
   assert.deepEqual(two, ['one two three\nfour five six', 'seven eight\nnine ten']);
 });
+
+test('cue ends at the latest word end, not the last word in the array', () => {
+  const cues = buildCues([w('Loooong', 0, 2), w('uh', 0.3, 0.4)], opts);
+  assert.equal(cues.length, 1);
+  assert.equal(cues[0].end, 2);
+});
+
+test('minimum duration never cuts real speech short when speakers overlap', () => {
+  const cues = buildCues([w('Hey', 0, 0.5, { speaker: 1 }), w('what', 0.2, 1, { speaker: 2 })], opts);
+  assert.equal(cues.length, 2);
+  assert.ok(cues[0].end >= 0.5, `A ends at ${cues[0].end}`);
+  assert.equal(cues[1].end, 1);
+});
+
+test('last cue padding stops at the media duration', () => {
+  const cues = buildCues([w('Bye.', 9.7, 9.8)], { ...opts, mediaDuration: 10 });
+  assert.equal(cues[0].end, 10);
+  assert.equal(buildCues([w('Bye.', 9.7, 9.8)], opts)[0].end, 10.5);
+});
+
+test('minimum duration floors stay inside the media end and the next cue', () => {
+  const eof = buildCues([w('Hi', 9.95, 9.99)], { ...opts, mediaDuration: 10 });
+  assert.equal(eof[0].end, 10);
+  const tight = buildCues([w('Hi', 9.97, 9.99)], { ...opts, minDuration: 0, mediaDuration: 10 });
+  assert.ok(tight[0].end <= 10 && tight[0].end >= 9.99);
+  const next = buildCues([w('One', 0, 0.02), w('Two', 5, 5.5)], { ...opts, minDuration: 0, mediaDuration: 10 });
+  assert.equal(next[0].end, 0.1); // 0.1 s floor, well before the next cue
+  const near = buildCues([w('One', 0, 0.02), w('Two', 0.05, 0.5)], { ...opts, minDuration: 0, pauseSplit: 0.01, mediaDuration: 10 });
+  assert.ok(near[0].end <= 0.05);
+});
+
+test('a zero-length word before a speaker change still gets a visible cue', () => {
+  const cues = buildCues([w('Wait', 1, 1, { speaker: 0 }), w('Go', 1, 1.5, { speaker: 1 })], { ...opts, mediaDuration: 10 });
+  assert.equal(cues.length, 2);
+  assert.ok(cues[0].end - cues[0].start >= 0.1 - 1e-9, JSON.stringify(cues[0]));
+  assert.ok(cues[0].start >= 0 && cues[0].end <= cues[1].start + 1e-9);
+  // After an earlier cue it borrows only the gap, never overlapping it.
+  const two = buildCues([w('Hi.', 0, 0.95, { speaker: 0 }), w('Wait', 1, 1, { speaker: 1 }), w('Go', 1, 1.5, { speaker: 0 })], { ...opts, mediaDuration: 10 });
+  assert.ok(two[1].end - two[1].start >= 0.05 && two[1].start >= two[0].end - 1e-9, JSON.stringify(two));
+});
+
+test('a zero-length word with no gap before or after never exports start == end', () => {
+  const words = [w('Hi', 0, 1, { speaker: 0 }), w('Wait', 1, 1, { speaker: 1 }), w('Go', 1, 1.5, { speaker: 0 })];
+  const cues = buildCues(words, opts);
+  assert.equal(cues.length, 3);
+  for (const c of cues) assert.ok(c.end - c.start >= 0.1 - 1e-9, `${c.text} ${c.start}-${c.end}`);
+});

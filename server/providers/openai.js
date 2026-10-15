@@ -1,6 +1,8 @@
 // OpenAI transcription — only whisper-1 returns word timestamps (verbose_json).
 // https://developers.openai.com/api/docs/guides/speech-to-text
-import { fileBlob, FormData, parseKeyterms, request } from './http.js';
+import { countTokens, fileBlob, FormData, keytermLimits, limitKeyterms, request } from './http.js';
+
+const PREFIX = 'Vocabulary: ';
 
 export default {
   id: 'openai',
@@ -11,6 +13,11 @@ export default {
   // 25 MB upload cap: 10 min of 48 kbps mono MP3 is ~3.6 MB.
   chunkSeconds: 600,
   codec: 'mp3',
+  // Chunks overlap by this much so words cut at a chunk edge are heard whole by one chunk.
+  chunkOverlap: 8,
+  // Whisper only uses the last 224 tokens of the prompt; stay under 200. Budget the whole "Vocabulary: a, b." string
+  // with the conservative counter (each term's +1 covers its comma or the final period).
+  keyterms: { maxTokens: 200, overheadTokens: countTokens(PREFIX) },
 
   async transcribe({ file, key, model, options, signal }) {
     const form = new FormData();
@@ -19,8 +26,9 @@ export default {
     form.append('timestamp_granularities[]', 'word');
     form.append('timestamp_granularities[]', 'segment');
     if (options.language) form.append('language', options.language);
-    const terms = parseKeyterms(options.keyterms);
-    if (terms.length) form.append('prompt', `Vocabulary: ${terms.join(', ')}.`);
+    const { terms } = limitKeyterms(options.keyterms, keytermLimits(this, model));
+    // Whisper keeps only the END of an over-long prompt, so put the most important terms last.
+    if (terms.length) form.append('prompt', `${PREFIX}${[...terms].reverse().join(', ')}.`);
     form.append('file', await fileBlob(file), 'audio.mp3');
 
     const data = await request('https://api.openai.com/v1/audio/transcriptions', {

@@ -16,6 +16,11 @@ export function validateOptions(input = {}) {
     if (typeof input[key] !== 'boolean') throw badRequest(`${key} must be on or off.`);
     out[key] = input[key];
   }
+  // How eagerly Grok treats quiet audio as speech (its vad_threshold); "normal" is Grok's default.
+  if ('speechSensitivity' in input) {
+    if (!['normal', 'more', 'most'].includes(input.speechSensitivity)) throw badRequest('Choose a valid "Catch quiet speech" setting.');
+    out.speechSensitivity = input.speechSensitivity;
+  }
   if ('termListIds' in input) {
     if (!Array.isArray(input.termListIds) || input.termListIds.some(id => typeof id !== 'string')) throw badRequest('Choose valid term lists.');
     out.termListIds = [...new Set(input.termListIds)];

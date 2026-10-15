@@ -43,7 +43,8 @@ export function joinWords(words) {
 }
 
 export function buildCues(words, opts, track = 0) {
-  const { maxLineChars = 42, maxLineWords = 0, maxLines = 2, maxDuration = 6, pauseSplit = 0.8, minDuration = 0.8 } = opts;
+  // mediaDuration (seconds, optional) bounds how far the last cue may be padded.
+  const { maxLineChars = 42, maxLineWords = 0, maxLines = 2, maxDuration = 6, pauseSplit = 0.8, minDuration = 0.8, mediaDuration } = opts;
   const maxChars = maxLineChars * maxLines;
   const cues = [];
   let current = [];
@@ -76,17 +77,30 @@ export function buildCues(words, opts, track = 0) {
   }
   flush();
 
+  let prevEnd = 0; // end of the previous cue as exported
   return cues.map((ws, i) => {
     const next = cues[i + 1];
-    const start = ws[0].start;
-    let end = ws[ws.length - 1].end;
-    // Keep short cues on screen long enough to read, without running into the next cue.
-    if (end - start < minDuration) end = Math.min(start + minDuration, next ? next[0].start : Infinity);
+    let start = ws[0].start;
+    // A word can end after a later one (long word + short overlapping word), so take the max.
+    const spokenEnd = Math.max(...ws.map((w) => w.end));
+    let end = spokenEnd;
+    // Keep short cues on screen long enough to read (at least 0.1 s), without running into the next
+    // cue or past the end of the media. Padding only ever extends: real speech is never cut short.
+    const wanted = start + Math.max(minDuration, 0.1);
+    if (end < wanted) {
+      const limit = next ? next[0].start : mediaDuration > 0 ? mediaDuration : Infinity;
+      end = Math.max(spokenEnd, Math.min(wanted, limit));
+      // Still under 0.1 s (e.g. a zero-length word right before the next one): borrow time from the gap before it.
+      if (end - start < 0.1 - 1e-9) start = Math.min(start, Math.max(prevEnd, end - 0.1));
+      // No gap on either side: let it overlap the next cue slightly rather than export start == end.
+      if (end - start < 0.001) end = start + 0.1;
+    }
+    prevEnd = Math.max(prevEnd, end);
     return {
       id: `${track}-${i}`,
       track,
       start: round(start),
-      end: round(Math.max(end, start + 0.1)),
+      end: round(end),
       text: lineSplit(joinWords(ws), maxLineChars, maxLines, maxLineWords),
       words: ws,
       speaker: ws[0].speaker ?? null,

@@ -596,3 +596,11 @@ button.list-summary strong { overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 460px) { .job-steps { grid-template-columns: 1fr; } }
 .import-step { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .import-step .progress { flex: none; }
+/* "Possibly missed" lines from the second opinion */
+.cue.missed-line { background: var(--accent-soft); border: 1px dashed #b6cff4; margin: 4px 0; }
+.cue.missed-line::before { content: ''; position: absolute; left: 2px; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--accent); }
+.missed-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 750; color: var(--accent-deep); }
+.missed-sug .sug-to { flex: 1 1 260px; color: var(--text); background: #fff; border-color: var(--line); }
+.missed-sug .sug-to.changed { color: var(--accent); background: var(--accent-soft); border-color: #b6cff4; }
+.tier-group.missed { background: var(--accent-soft); margin-bottom: 10px; }
+.missed .tier-head { background: var(--accent); color: #fff; }

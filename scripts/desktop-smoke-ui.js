@@ -33,8 +33,9 @@
   await route(`#/jobs/${fixture.jobId}`);
   await until(()=>document.querySelector('.cue-text'));
   assert(document.querySelectorAll('.cue').length===100,'Long transcripts render one page at a time');
+  assert(document.querySelector('.cue.missed-line')?.textContent.includes('Possibly missed'),'Missed lines from a second opinion show in the transcript');
   button('Next page').click(); await sleep(100);
-  assert(document.querySelectorAll('.cue').length===20,'Transcript pagination reaches remaining lines');
+  assert(document.querySelectorAll('.cue').length===21,'Transcript pagination reaches remaining lines (120 lines + 1 missed)');
   button('Previous page').click(); await sleep(100);
   const first = document.querySelector('.cue-text'); const original = first.textContent;
   first.click(); await sleep(50);

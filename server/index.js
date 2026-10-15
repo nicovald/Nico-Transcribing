@@ -6,7 +6,7 @@ import busboy from 'busboy';
 import express from 'express';
 import { pipeline } from 'node:stream/promises';
 import { badRequest, object, validateId, validateOptions, validateSetup, validateSettings } from './validation.js';
-import { updateTranscript } from './transcript.js';
+import { lockPhrase, updateTranscript } from './transcript.js';
 import { safeName, uniqueFiles, exportPlan, writeExports } from './export.js';
 import * as history from './history.js';
 import * as jobs from './jobs.js';
@@ -448,6 +448,13 @@ app.patch('/api/jobs/:id/cues/:cueId', (req, res) => {
       // Retyping a few misheard words teaches the app the same as clicking Fix.
       const lesson = memory.learnedFromEdit(current.text, text);
       if (lesson) memory.recordFix(lesson.from, lesson.to, { fixed: 1 });
+      // Words the user typed are locked so later checks never re-flag them (see transcript.js).
+      const { to: typed } = memory.changedSpan(current.text, text);
+      // A line edited by an older version: we cannot tell what was typed before, so lock all of it.
+      const legacy = current.edited && !Array.isArray(current.locked);
+      if (!Array.isArray(current.locked)) current.locked = [];
+      if (legacy) lockPhrase(current, text);
+      else if (typed) lockPhrase(current, typed);
       Object.assign(current,{text,edited:true});
     }
     Object.assign(current,{start:nextStart,end:nextEnd});

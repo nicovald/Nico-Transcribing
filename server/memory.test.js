@@ -74,6 +74,18 @@ test('names are caught by sound, possessives and split words included', () => {
   assert.deepEqual(found([cue('5', 'Take a look in the chest.')]), []);
 });
 
+test('edited lines are still checked, but never the words the user set', () => {
+  const edited = (text, locked) => ({ ...cue('e', text), edited: true, locked });
+  // The user typed "Craner" on purpose: leave it. The other Craner is still flagged, and only that one.
+  const [s] = memory.memoryCheck([edited('Craner called Craner', ['Craner called'])]);
+  assert.equal(s.occurrence, 1);
+  assert.deepEqual(found([edited('Hey Craner', [])]), ['Craner -> Crainer (unsure)']);
+  assert.deepEqual(found([edited('Hey Craner', ['Craner'])]), []);
+  // Edited by an older version (no lock list): skipped as before.
+  assert.deepEqual(found([{ ...cue('o', 'Hey Craner'), edited: true }]), []);
+  assert.deepEqual(memory.changedSpan('Hey Craner, look', 'Hey Crainer, look over there'), { from: 'Craner, look', to: 'Crainer, look over there' });
+});
+
 test('importing a teammate file merges without double counting', () => {
   const file = {
     kind: 'grok-transcriber-memory',
