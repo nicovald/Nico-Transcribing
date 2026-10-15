@@ -98,8 +98,9 @@ async function createWindow() {
   const display = screen.getPrimaryDisplay().workAreaSize;
 
   win = new BrowserWindow({
-    width: Math.min(Number(process.env.SCREENSHOT_WIDTH) || saved.width || 1280, display.width),
-    height: Math.min(saved.height || 900, display.height),
+    // Screenshot runs render offscreen at exactly the requested size, even on small CI screens.
+    width: process.env.SCREENSHOT ? Number(process.env.SCREENSHOT_WIDTH) || 1280 : Math.min(saved.width || 1280, display.width),
+    height: process.env.SCREENSHOT ? 900 : Math.min(saved.height || 900, display.height),
     minWidth: process.env.SCREENSHOT ? 320 : 960,
     minHeight: 650,
     show: !process.env.SCREENSHOT,
