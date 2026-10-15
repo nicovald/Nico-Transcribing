@@ -336,7 +336,9 @@ test('a partial second opinion names the unchecked track and Retry redoes only t
   store.saveSettings({ keys: { deepgram: 'test-only' } });
   providers.grok.transcribe = async () => ({ words: sandy, language: 'en' });
   let calls = 0;
-  providers.deepgram.transcribe = async () => { calls++; if (calls === 2) throw new Error('Deepgram was busy'); return { words: [{ text: 'sandstone', start: 0, end: .6, confidence: .9 }], language: 'en' }; };
+  // Tracks run in parallel: fail the second track (by its audio folder) on its first attempt only.
+  let failedOnce = false;
+  providers.deepgram.transcribe = async ({ file }) => { calls++; if (!failedOnce && /tmp-1[\\/]/.test(file)) { failedOnce = true; throw new Error('Deepgram was busy'); } return { words: [{ text: 'sandstone', start: 0, end: .6, confidence: .9 }], language: 'en' }; };
   const job = mkSecond(['deepgram'], ['Mic A', 'Mic B']); await jobs.runJob(job.id);
   await waitFor(() => store.getJob(job.id).compares.deepgram?.status === 'partial');
   const entry = store.getJob(job.id).compares.deepgram;
