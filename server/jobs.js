@@ -13,6 +13,7 @@ import { readTranscript, updateTranscript } from './transcript.js';
 import { badRequest, validateOptions } from './validation.js';
 import { withTrackSlot } from './work.js';
 import { getMemory, tierOf } from './memory.js';
+import { deleteBlob, downloadBlob } from './cloud.js';
 
 // Live progress lives in memory so we are not rewriting JSON on every ffmpeg tick.
 const progress = new Map(); // key -> 0..1
@@ -39,7 +40,7 @@ export const onJobEvent = (fn) => listeners.add(fn);
 // Imports run one at a time so several dropped multicam files don't thrash the disk.
 let importChain = Promise.resolve();
 
-export function createMedia({ projectId, name, sourcePath, copied }) {
+export function createMedia({ projectId, name, sourcePath, copied, downloadUrl = null }) {
   if (deleting.has(projectId)) throw new Error('This project is being removed.');
   const media = {
     id: crypto.randomUUID(),
@@ -49,6 +50,7 @@ export function createMedia({ projectId, name, sourcePath, copied }) {
     sourcePath,
     sourceDir: copied ? null : path.dirname(sourcePath),
     copied, // true when sourcePath is our own uploaded copy (deleted after extraction)
+    downloadUrl, // team mode: the upload waits in Blob storage until the import copies it to sourcePath
     status: 'queued',
     error: null,
     duration: null,
@@ -83,6 +85,15 @@ async function importMedia(mediaId, signal) {
   media.status = 'importing';
   store.saveMedia(media);
   try {
+    if (media.downloadUrl) {
+      const key = `media:${media.id}:download`;
+      progress.set(key, 0);
+      try { await downloadBlob(media.downloadUrl, media.sourcePath, { signal, onProgress: p => progress.set(key, p) }); }
+      finally { progress.delete(key); }
+      await deleteBlob(media.downloadUrl);
+      media.downloadUrl = null;
+      store.saveMedia({ ...media, displayName: store.getMedia(media.id)?.displayName ?? media.displayName });
+    }
     const info = await probe(media.sourcePath, { signal });
     if (!info.tracks.length) throw new Error('No audio tracks found in this file.');
     media.duration = info.duration;
@@ -556,7 +567,7 @@ export function recoverInterrupted() {
   }
   for (const media of store.listMedia()) {
     if (media.status === 'importing' || media.status === 'queued') {
-      if (media.copied) {
+      if (media.copied && !media.downloadUrl) {
         media.status = 'error';
         media.error = 'Import interrupted (app was closed). Import the file again.';
         store.saveMedia(media);

@@ -19,6 +19,7 @@ import * as store from './store.js';
 import * as sug from './suggestions.js';
 import * as memory from './memory.js';
 import { exportTeamSettings, importTeamSettings, isSettingsFile, parseTeamEnv } from './team.js';
+import * as cloud from './cloud.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -126,10 +127,16 @@ export const app = express();
 let desktopToken = null;
 export const configureDesktop = token => { desktopToken = token; };
 app.use('/api', (req,res,next) => {
+  // Team mode: the sandbox URL is public, so only the proxy (secret header) or a signed audio link gets in.
+  if (cloud.isCloud) {
+    if (cloud.isSignedAudio(req)) return next();
+    if (!cloud.fromProxy(req)) return res.status(403).json({ error: 'Open the transcriber through its team link.' });
+  }
   if (req.headers['sec-fetch-site'] === 'cross-site') return res.status(403).json({ error: "Open this action inside Nico's Transcriber." });
   if (desktopToken && !String(req.headers.cookie || '').split(';').some(c => c.trim() === `desktop-session=${desktopToken}`)) return res.status(403).json({ error: 'This request is outside the desktop session.' });
   const devOrigin = !desktopToken && process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1):5173$/.test(req.headers.origin || '');
-  if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && !devOrigin) return res.status(403).json({error:'This request came from another app.'});
+  const origin = cloud.isCloud ? `https://${req.headers['x-forwarded-host']}` : `http://${req.headers.host}`;
+  if (req.headers.origin && req.headers.origin !== origin && !devOrigin) return res.status(403).json({error:'This request came from another app.'});
   next();
 });
 app.use(express.json({ limit: '20mb' }));
@@ -137,7 +144,7 @@ app.param('id', (req,res,next,id) => { try { validateId(id); next(); } catch(err
 
 const notFound = (res, what = 'Not found') => res.status(404).json({ error: what });
 
-app.get('/api/version', (req, res) => res.json({ name: pkg.name, version: pkg.version }));
+app.get('/api/version', (req, res) => res.json({ name: pkg.name, version: pkg.version, ...(cloud.isCloud && { team: true, commit: process.env.APP_COMMIT || null }) }));
 app.get('/api/licenses', (req, res) => {
   const bundled = path.join(path.dirname(ROOT), 'licenses', 'THIRD-PARTY-LICENSES.txt');
   const generated = path.join(ROOT, 'build', 'legal', 'THIRD-PARTY-LICENSES.txt');
@@ -256,6 +263,7 @@ app.get('/api/presets/minecraft', async (req, res) => {
 
 const withMediaProgress = (m) => ({
   ...m,
+  downloadProgress: m.downloadUrl ? jobs.getProgress(`media:${m.id}:download`) ?? 0 : null,
   tracks: m.tracks.map((t) => ({ ...t, progress: jobs.getProgress(`media:${m.id}:${t.index}`) })),
 });
 
@@ -358,6 +366,17 @@ app.post('/api/projects/:id/upload', async (req, res, next) => {
     if (dest) fs.rmSync(dest,{force:true});
     next(badRequest(`The upload could not finish: ${err.message}. Please try again.`));
   }
+});
+
+// Team mode: the browser uploaded straight to private Blob storage; the import step copies it here.
+app.post('/api/projects/:id/import-blob', (req, res) => {
+  if (!cloud.isCloud) throw badRequest('Uploads from storage only work in the team version.');
+  if (!store.getProject(req.params.id)) return notFound(res);
+  const { url, name } = object(req.body);
+  if (typeof url !== 'string' || !cloud.checkBlobUrl(url)) throw badRequest('That upload could not be found. Please upload the file again.');
+  const base = path.basename(String(name || 'video'));
+  const sourcePath = path.join(store.MEDIA_DIR, `upload-${crypto.randomUUID()}${path.extname(base)}`);
+  res.json(jobs.createMedia({ projectId: req.params.id, name: base, sourcePath, copied: true, downloadUrl: url }));
 });
 
 // ---------------------------------------------------------------- media

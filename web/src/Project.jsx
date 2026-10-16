@@ -26,6 +26,7 @@ const importing = (m) => m.status === 'importing' || m.status === 'queued';
 const trackKey = (mediaId, index) => `${mediaId}:${index}`;
 
 function importPercent(m) {
+  if (m.downloadProgress != null) return m.downloadProgress;
   if (!m.tracks.length) return 0;
   const done = m.tracks.reduce((sum, t) => sum + (t.extracted ? 1 : t.progress || 0), 0);
   return done / m.tracks.length;
@@ -33,6 +34,7 @@ function importPercent(m) {
 
 function importStep(m) {
   if (m.status === 'queued') return 'Waiting for the video before it to finish…';
+  if (m.downloadProgress != null) return 'Copying the upload…';
   if (!m.tracks.length) return 'Finding audio tracks…';
   const next = m.tracks.findIndex((t) => !t.extracted);
   if (next < 0) return 'Finishing up…';

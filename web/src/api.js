@@ -17,8 +17,30 @@ export const api = {
   del: (url) => call('DELETE', url),
 };
 
-// XHR instead of fetch so we get upload progress for multi-GB videos (browser mode only).
-export function uploadFile(projectId, file, onProgress) {
+let teamMode;
+const isTeam = () => (teamMode ??= api.get('/api/version').then((v) => Boolean(v.team), () => false));
+
+// Browser upload of multi-GB videos. The team version (Vercel) sends the file straight to private
+// Blob storage in parts, then asks the server to import it; otherwise the server receives it directly.
+export async function uploadFile(projectId, file, onProgress) {
+  if (!(await isTeam())) return uploadToServer(projectId, file, onProgress);
+  const { upload } = await import('@vercel/blob/client');
+  let blob;
+  try {
+    blob = await upload(`uploads/${crypto.randomUUID()}/${file.name}`, file, {
+      access: 'private',
+      handleUploadUrl: '/api/upload-token',
+      multipart: true,
+      onUploadProgress: ({ percentage }) => onProgress(percentage / 100),
+    });
+  } catch (err) {
+    throw new Error(`The upload could not finish: ${err.message}. Please try again.`);
+  }
+  return api.post(`/api/projects/${projectId}/import-blob`, { url: blob.url, name: file.name });
+}
+
+// XHR instead of fetch so we get upload progress for multi-GB videos.
+function uploadToServer(projectId, file, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api/projects/${projectId}/upload`);

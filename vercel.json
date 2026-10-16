@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path((?!proxy$|upload-token$|keepalive$).*)", "destination": "/api/proxy?__path=:path" }
+  ],
+  "functions": {
+    "api/proxy.js": { "maxDuration": 300 },
+    "api/keepalive.js": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/keepalive", "schedule": "*/2 * * * *" }
+  ]
+}

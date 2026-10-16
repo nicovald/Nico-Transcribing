@@ -1,5 +1,6 @@
 node_modules
 dist
+.vercel
 .env
 *.env
 .env.*
@@ -12,3 +13,4 @@ data/*
 release
 vendor
 build/legal
+.env*
