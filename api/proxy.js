@@ -29,7 +29,19 @@ export default async function handler(req, res) {
       res.setHeader('cache-control', 'private, no-store');
       return res.end();
     }
-    const headers = { 'x-proxy-secret': SECRET, 'x-forwarded-host': req.headers['x-forwarded-host'] || req.headers.host };
+    // Requests from other sites are refused here; the server then checks Origin against this host.
+    const hosts = new Set([req.headers.host, req.headers['x-forwarded-host']].filter(Boolean));
+    let host = req.headers.host;
+    if (req.headers.origin) {
+      try { host = new URL(req.headers.origin).host; } catch { host = ''; }
+      if (!hosts.has(host)) {
+        console.warn('proxy: refused origin', req.headers.origin, [...hosts]);
+        res.statusCode = 403;
+        res.setHeader('content-type', 'application/json');
+        return res.end(JSON.stringify({ error: 'This request came from another app.' }));
+      }
+    }
+    const headers = { 'x-proxy-secret': SECRET, 'x-forwarded-host': host };
     for (const [k, v] of Object.entries(req.headers)) if (!SKIP_IN.has(k) && !k.startsWith('x-vercel') && !k.startsWith('x-forwarded') && v != null) headers[k] = v;
     const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req);
     const upstream = await fetch(`${base}${path}${query ? `?${query}` : ''}`, { method: req.method, headers, body, redirect: 'manual' });

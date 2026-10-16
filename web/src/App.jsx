@@ -7,7 +7,7 @@ import Review from './Review.jsx';
 import Settings from './Settings.jsx';
 import TeamSetup from './TeamSetup.jsx';
 import { updateMessage } from './Updates.jsx';
-import { desktop, Icon, Logo, Progress, scroller } from './shared.jsx';
+import { desktop, Icon, Logo, Progress, scroller, team } from './shared.jsx';
 
 // Tiny hash router: #/, #/projects/<id>, #/jobs/<id>, #/learned, #/settings
 function useRoute() {
@@ -174,7 +174,7 @@ export default function App() {
           )}
           <div className="sidebar-foot">
             <span className="app-activity" role="status">{activeCount ? <><span className="spinner" /> {activeCount} task{activeCount === 1 ? '' : 's'} running</> : null}</span>
-            <span>v{__APP_VERSION__}<span className="foot-extra"> · {desktop ? 'Windows desktop' : 'Browser'}</span></span>
+            <span>v{__APP_VERSION__}<span className="foot-extra"> · {desktop ? 'Windows desktop' : team ? 'Team' : 'Browser'}</span></span>
           </div>
         </aside>
         <div className="main-col">
@@ -231,7 +231,7 @@ export default function App() {
           )}
         </main>
 
-        <footer>Nico's Transcriber v{__APP_VERSION__} · Projects saved on this computer</footer>
+        <footer>Nico's Transcriber v{__APP_VERSION__} · {team ? 'Projects shared with your team' : 'Projects saved on this computer'}</footer>
         </div>
         {teamSetup && settings && <TeamSetup onClose={() => setTeamSetup(false)} onImported={loadSettings} />}
         </div>

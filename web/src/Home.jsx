@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api, formatTime } from './api.js';
 import { navigate, useApp } from './App.jsx';
-import { desktop, DropTarget, EditableText, Icon, isMediaFile, StatusPill } from './shared.jsx';
+import { desktop, DropTarget, EditableText, Icon, isMediaFile, StatusPill, team } from './shared.jsx';
 import usePoll from './usePoll.js';
 
 // A stable, playful color per project for its tile.
@@ -88,7 +88,7 @@ export default function Home({ active }) {
         />
       </DropTarget>
 
-      {!desktop && (
+      {!desktop && !team && (
         <form
           className="path-row"
           onSubmit={(e) => {

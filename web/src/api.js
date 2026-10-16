@@ -17,13 +17,10 @@ export const api = {
   del: (url) => call('DELETE', url),
 };
 
-let teamMode;
-const isTeam = () => (teamMode ??= api.get('/api/version').then((v) => Boolean(v.team), () => false));
-
 // Browser upload of multi-GB videos. The team version (Vercel) sends the file straight to private
 // Blob storage in parts, then asks the server to import it; otherwise the server receives it directly.
 export async function uploadFile(projectId, file, onProgress) {
-  if (!(await isTeam())) return uploadToServer(projectId, file, onProgress);
+  if (!__TEAM__) return uploadToServer(projectId, file, onProgress);
   const { upload } = await import('@vercel/blob/client');
   let blob;
   try {

@@ -5,7 +5,8 @@ import pkg from './package.json' with { type: 'json' };
 export default defineConfig({
   root: 'web',
   plugins: [react()],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  // Builds on Vercel are the shared team version (see api/ and README "Team version").
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), __TEAM__: JSON.stringify(process.env.VERCEL === '1') },
   build: { outDir: '../dist', emptyOutDir: true },
   server: {
     host: true,
