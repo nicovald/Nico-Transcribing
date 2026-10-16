@@ -20,7 +20,7 @@ await once(server, 'listening');
 after(async () => { server.closeAllConnections(); await new Promise(r => server.close(r)); fs.rmSync(temp, { recursive: true, force: true }); });
 
 const base = () => `http://127.0.0.1:${server.address().port}`;
-const proxied = { 'x-proxy-secret': SECRET, 'x-forwarded-host': 'transcriber.example.dev' };
+const proxied = { 'x-proxy-secret': SECRET, 'x-team-host': 'transcriber.example.dev' };
 
 test('requests without the proxy secret are refused', async () => {
   assert.equal((await fetch(`${base()}/api/version`)).status, 403);

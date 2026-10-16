@@ -135,7 +135,7 @@ app.use('/api', (req,res,next) => {
   if (req.headers['sec-fetch-site'] === 'cross-site') return res.status(403).json({ error: "Open this action inside Nico's Transcriber." });
   if (desktopToken && !String(req.headers.cookie || '').split(';').some(c => c.trim() === `desktop-session=${desktopToken}`)) return res.status(403).json({ error: 'This request is outside the desktop session.' });
   const devOrigin = !desktopToken && process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1):5173$/.test(req.headers.origin || '');
-  const origin = cloud.isCloud ? `https://${req.headers['x-forwarded-host']}` : `http://${req.headers.host}`;
+  const origin = cloud.isCloud ? `https://${req.headers['x-team-host']}` : `http://${req.headers.host}`;
   if (req.headers.origin && req.headers.origin !== origin && !devOrigin) return res.status(403).json({error:'This request came from another app.'});
   next();
 });

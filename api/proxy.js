@@ -5,7 +5,7 @@ import { SECRET, ensureServer } from './_sandbox.js';
 
 const AUDIO = /^\/api\/media\/[^/]+\/tracks\/\d+\/audio$/;
 // Hop-by-hop and Vercel-internal headers are not forwarded.
-const SKIP_IN = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'x-proxy-secret', 'cookie']);
+const SKIP_IN = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'x-proxy-secret', 'x-team-host', 'cookie']);
 const SKIP_OUT = new Set(['connection', 'content-length', 'content-encoding', 'transfer-encoding', 'keep-alive']);
 
 async function readBody(req) {
@@ -29,7 +29,8 @@ export default async function handler(req, res) {
       res.setHeader('cache-control', 'private, no-store');
       return res.end();
     }
-    // Requests from other sites are refused here; the server then checks Origin against this host.
+    // Requests from other sites are refused here; the server then checks Origin against this host
+    // (a custom header, because the sandbox's front door rewrites X-Forwarded-Host).
     const hosts = new Set([req.headers.host, req.headers['x-forwarded-host']].filter(Boolean));
     let host = req.headers.host;
     if (req.headers.origin) {
@@ -41,7 +42,7 @@ export default async function handler(req, res) {
         return res.end(JSON.stringify({ error: 'This request came from another app.' }));
       }
     }
-    const headers = { 'x-proxy-secret': SECRET, 'x-forwarded-host': host };
+    const headers = { 'x-proxy-secret': SECRET, 'x-team-host': host };
     for (const [k, v] of Object.entries(req.headers)) if (!SKIP_IN.has(k) && !k.startsWith('x-vercel') && !k.startsWith('x-forwarded') && v != null) headers[k] = v;
     const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req);
     const upstream = await fetch(`${base}${path}${query ? `?${query}` : ''}`, { method: req.method, headers, body, redirect: 'manual' });
