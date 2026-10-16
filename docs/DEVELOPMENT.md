@@ -30,6 +30,10 @@ Env vars: `DATA_DIR`, `PORT` (3462, browser mode), `HOST` (127.0.0.1), `OPEN_BRO
 
 The same server runs without Electron (`npm start` → <http://localhost:3462>), where videos are uploaded instead of read in place. `docker compose up -d --build` runs it on a server at port 3462. There is no login, so only expose it on a private network (a home LAN or a VPN such as Tailscale), never the open internet.
 
+## Team version (Vercel)
+
+Pushes to `main` deploy the shared team version: the same server in a Vercel Sandbox behind a protected proxy. See [the team guide](TEAM.md). `npm test` covers the team-mode checks (`server/cloud.test.js`); branches get their own preview sandbox for end-to-end testing.
+
 ## Releasing
 
 See [the release guide](RELEASING.md). Update the version and changelog, commit and push to `main`, then run on Windows:

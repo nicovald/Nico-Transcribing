@@ -2,6 +2,11 @@
 
 Installers for each version are on the [GitHub releases](https://github.com/nicovald/Nico-Transcribing/releases) page. Installed apps update themselves.
 
+## 1.3.0 (2026-10-16)
+- **Team version**: one shared copy in the browser at transcriber.nicovald.dev for the whole team. Editors sign in with their Vercel account; nothing to install. Projects, API keys, learned fixes and term lists are shared. See [Team version](docs/TEAM.md).
+- Uploads of any size go straight to private cloud storage with a progress bar, then show "Copying the upload…" while they are brought in.
+- The desktop app works exactly as before.
+
 ## 1.2.3 (2026-10-14)
 - Pages now open at the top instead of keeping the previous page's scroll position; Projects, Settings and Learned fixes remember their own.
 - **Next page** in Review starts at the first line of the new page.

@@ -48,6 +48,7 @@ It updates itself.
 ## More
 
 - [User guide](docs/GUIDE.md): every feature, providers, team setup, where your data lives
+- [Team version](docs/TEAM.md): one shared copy in the browser for your editors, hosted on Vercel
 - [Development](docs/DEVELOPMENT.md): run from source, Docker, API, how it works
 - [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/nicovald/Nico-Transcribing/issues)
 
