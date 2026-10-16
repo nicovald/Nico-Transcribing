@@ -14,6 +14,7 @@ Windows desktop app (Electron) for editors: import multi-track/multicam videos i
 - `server/memory.js`: learned fixes (tiers: usual/unsure) + people list in `data/memory.json`; Fix/Ignore/hand edits feed it; export/import file for sharing.
 - `server/srt.js`: words → cues → SRT.
 - Team version (Vercel, `docs/TEAM.md`): `api/` functions proxy `/api` to the unchanged server running in a Vercel Sandbox (data on a Drive), mint Blob upload tokens, keep it awake. `server/cloud.js` gates requests only when `PROXY_SECRET` is set; never let it affect desktop/Docker. The sandbox URL is public: the secret header or a signed audio link is the only way in.
+- Vercel team rules (full list in `docs/TEAM.md`): never create bypass keys (`vercel curl` makes one), Shareable Links or passwords; test protected deploys by asking Nico or locally. Editors get access via Request Access, never team invites. Previews use their own Blob store. $10 on-demand budget with Pause on: tell Nico before adding recurring cost.
 - `web/src/`: React UI, hash routing. Home, Settings and Learned fixes stay mounted so switching pages never loses state.
 - `data/`: runtime state incl. API keys. Gitignored. Never commit.
 
