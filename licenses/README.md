@@ -13,6 +13,11 @@ change; it does not silently reuse an older fallback.
   commit `b4d2c14fc5b4ccff3ff271e3b087dff812254c59` contains Apache-2.0 instead.
   The notice preserves both declarations and the verbatim repository license;
   it does not claim upstream resolved the discrepancy.
+- `is-node-process@1.2.0` (pulled in by `@vercel/blob`, used only by the team
+  version): npm declares MIT. Neither the npm package nor the repository at tag
+  `v1.2.0` (commit `8a6152c795d8705be97166bd5167e70ac6efc67c`) supplies a license
+  file or names an author. The notice reproduces the standard MIT terms without
+  inventing a copyright holder or year.
 
 Source URLs are included in each notice. Other dependencies' license files are
 copied directly from the installed packages during the build.
